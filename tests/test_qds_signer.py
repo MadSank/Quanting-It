@@ -1,75 +1,70 @@
 import pytest
-from src.qds_signer import QDSSigner, derive_signing_spec
-from src.qpkd import QPKDSession
-from src.quantum_resources import SessionResourceManager, ResourceType
+from src.qds_signer import GCSigner, GCSignature, QDSSigner
+from src.gc_keys import GCKeyGenerator, GCKeyPair
 
-def test_derive_signing_spec_determinism():
-    """Test that deriving the spec from the same hash produces the same spec."""
-    msg_hash = "a" * 64
-    ctx = "b" * 64
-    
-    spec1 = derive_signing_spec(msg_hash, ctx, n_qubits=64)
-    spec2 = derive_signing_spec(msg_hash, ctx, n_qubits=64)
-    
-    assert spec1 == spec2
-    assert len(spec1) == 64
-    
-    # Check structure
-    for s in spec1:
-        assert s["basis"] in ["Z", "X"]
-        if s["basis"] == "Z":
-            assert s["state"] in ["|0>", "|1>"]
-        else:
-            assert s["state"] in ["|+>", "|->"]
 
-def test_qds_signing_success():
-    """Test full QDS signing flow with resource consumption."""
-    session_id = "test_session"
-    
-    # Setup resources
-    qpkd = QPKDSession(session_id)
-    # We must mock get_session_auth_context since we skip actual distribution here
-    qpkd.get_session_auth_context = lambda: "abcdef" * 10 
-    
-    manager = SessionResourceManager(session_id)
-    manager.allocate_pairs(64, ResourceType.SIGNATURE_PAIR)
-    
-    msg_hash = "123456" * 10
-    
-    signature = QDSSigner.sign(
-        message_hash=msg_hash,
-        session_auth_context=qpkd.get_session_auth_context(),
-        resource_manager=manager,
-        session_id=session_id,
+def test_encode_message_determinism():
+    """Test that message encoding to M bits is deterministic."""
+    msg = b"QUATINIT_TRANSACTION_PAYLOAD"
+    bits1 = GCSigner.encode_message(msg, n_positions=32)
+    bits2 = GCSigner.encode_message(msg, n_positions=32)
+
+    assert bits1 == bits2
+    assert len(bits1) == 32
+    assert all(b in (0, 1) for b in bits1)
+
+
+def test_encode_different_messages():
+    """Different messages produce different bit sequences."""
+    msg1 = b"PAYMENT_A"
+    msg2 = b"PAYMENT_B"
+    bits1 = GCSigner.encode_message(msg1, n_positions=32)
+    bits2 = GCSigner.encode_message(msg2, n_positions=32)
+
+    assert bits1 != bits2
+
+
+def test_gc_signer_reveals_correct_keys():
+    """Signer reveals Alice's private key k_{b_i}^i for each position i."""
+    key_pair = GCKeyGenerator.generate(n_positions=16, fingerprint_qubits=8, private_key_bits=128)
+    msg = b"HELLO GC QDS"
+
+    sig = GCSigner.sign(
+        message=msg,
+        key_pair=key_pair,
+        session_id="session_001",
         sequence_number=1,
-        n_qubits=64
     )
-    
-    assert signature.session_id == session_id
-    assert signature.n_qubits == 64
-    assert len(signature.teleported_states) == 64
-    assert len(signature.correction_bits) == 128  # 2 bits per qubit (crz, crx)
-    
-    # Check that resources were consumed
-    remaining = [k for k, v in manager.resources.items() if v.status.name == "UNUSED"]
-    assert len(remaining) == 0
 
-def test_qds_signing_resource_exhaustion():
-    """Test signing fails if not enough Bell pairs are available."""
-    session_id = "test_session"
-    
-    qpkd = QPKDSession(session_id)
-    qpkd.get_session_auth_context = lambda: "abcdef" * 10
-    
-    manager = SessionResourceManager(session_id)
-    manager.allocate_pairs(10, ResourceType.SIGNATURE_PAIR)  # Only 10 pairs
-    
-    with pytest.raises(ValueError, match="Not enough SIGNATURE_PAIR resources"):
-        QDSSigner.sign(
-            message_hash="123",
-            session_auth_context="456",
-            resource_manager=manager,
-            session_id=session_id,
-            sequence_number=1,
-            n_qubits=64
-        )
+    assert isinstance(sig, GCSignature)
+    assert sig.n_positions == 16
+    assert len(sig.revealed_keys) == 16
+    assert sig.session_id == "session_001"
+    assert sig.sequence_number == 1
+
+    # Verify that revealed key at position i matches k_{b_i}^i
+    for i in range(16):
+        expected_bit = sig.message_bits[i]
+        expected_key = key_pair.private_keys[i].get_key_for_bit(expected_bit)
+        assert sig.revealed_keys[i] == expected_key
+
+
+def test_gc_signer_preserves_unrevealed_keys():
+    """For each position, only the bit-chosen key is revealed; the complement is NOT."""
+    key_pair = GCKeyGenerator.generate(n_positions=16, fingerprint_qubits=8, private_key_bits=128)
+    msg = b"PARTIAL_REVELATION"
+
+    sig = GCSigner.sign(message=msg, key_pair=key_pair)
+
+    for i in range(16):
+        chosen_bit = sig.message_bits[i]
+        complement_bit = 1 - chosen_bit
+        complement_key = key_pair.private_keys[i].get_key_for_bit(complement_bit)
+
+        # The complement key must NOT be in revealed_keys for this position
+        assert sig.revealed_keys[i] != complement_key
+
+
+def test_qds_signer_alias_backward_compatibility():
+    """Verify QDSSigner alias works as GCSigner."""
+    assert QDSSigner is GCSigner

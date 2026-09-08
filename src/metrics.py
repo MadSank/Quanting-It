@@ -3,6 +3,14 @@ from typing import Dict, List, Any, Optional
 import enum
 from src.threat_engine import ThreatScore
 
+class DefenseStatus(enum.Enum):
+    """Honest classification of security mechanism against an attack."""
+    PREVENTED = "PREVENTED"          # Structurally prevented by protocol constraints (e.g. Holevo information bound, copy budget)
+    DETECTED = "DETECTED"            # Detected by statistical test or verification layer
+    MITIGATED = "MITIGATED"          # Impact bounded/tolerated by design (e.g. noise margin)
+    NOT_DETECTABLE = "NOT_DETECTABLE" # Cannot be detected at this layer
+    OUT_OF_SCOPE = "OUT_OF_SCOPE"    # Beyond threat model (e.g. side-channel, long-term memory)
+
 class AttackType(enum.Enum):
     NO_ATTACK = "NO_ATTACK"
     MESSAGE_TAMPERING = "MESSAGE_TAMPERING"
@@ -22,6 +30,13 @@ class AttackType(enum.Enum):
     CROSS_SESSION_REUSE = "CROSS_SESSION_REUSE"
     E91_CHANNEL_DISTURBANCE = "E91_CHANNEL_DISTURBANCE"
     SIGNATURE_TAMPERING = "SIGNATURE_TAMPERING"
+    # GC QDS specific attacks
+    KEY_SUBSTITUTION = "KEY_SUBSTITUTION"
+    COPY_EXHAUSTION = "COPY_EXHAUSTION"
+    UNAUTHORIZED_VERIFICATION = "UNAUTHORIZED_VERIFICATION"
+    REPUDIATION_ATTEMPT = "REPUDIATION_ATTEMPT"
+    TRANSFERABILITY_ATTACK = "TRANSFERABILITY_ATTACK"
+    HOLEVO_EXHAUSTION = "HOLEVO_EXHAUSTION"
 
 @dataclass
 class AttackResult:
@@ -32,7 +47,12 @@ class AttackResult:
     detection_layer: str  # e.g., "CLASSICAL_HASH", "QDS_VERIFICATION", "REPLAY_PROTECTION", "E91_CHANNEL"
     rejection_code: str
     threat_score: Optional[ThreatScore] = None
+    defense_status: DefenseStatus = DefenseStatus.DETECTED
     details: Dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def qds_result(self) -> Optional[Any]:
+        return self.details.get("qds_result")
 
 class SecurityMetrics:
     def __init__(self):

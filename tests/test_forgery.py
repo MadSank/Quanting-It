@@ -1,83 +1,82 @@
 import pytest
 import numpy as np
-from src.qds_verifier import QDSVerifier
+import os
+from src.qds_verifier import GCVerifier, VerificationOutcome
+from src.qds_signer import GCSigner, GCSignature
+from src.gc_keys import GCKeyGenerator, GCKeyPair, VerifierKeyRegister
 from src.eve import Eve
-from src.qds_signer import derive_signing_spec
-from src.threat_engine import ForgeryModel
+from src.threat_engine import GCForgeryModel, ForgeryModel
 
-def test_empirical_forgery_rate_matches_bound():
+
+def test_gc_empirical_forgery_mismatch_rate():
     """
-    Empirical validation of the forgery bound.
-    We run 100 forgery attempts and verify that the mean mismatch rate
-    aligns with the theoretical expectation of ~25%.
+    Empirical validation of the Gottesman-Chuang forgery bound.
+    When Eve generates random keys without knowing Alice's private keys,
+    the SWAP test between |f_{k_eve}⟩ and stored public key |f_{k_alice}⟩
+    has acceptance probability ~0.50 (mismatch rate ~50%).
     """
-    n_qubits = 64
-    n_attempts = 100
+    n_positions = 16
+    n_attempts = 15
     mismatches_collected = []
-    
-    msg_hash = "1234567890" * 6
-    ctx = "abcdef" * 10
-    
-    verifier = QDSVerifier(mismatch_threshold=0.05)
-    
+
     for _ in range(n_attempts):
-        # Eve creates a completely forged signature without quantum key
-        forged_sig = Eve.forge_signature(msg_hash, ctx, n_qubits)
-        
-        # We need to bypass the classical ML-DSA check just for this test
-        # so we can measure the quantum statistical properties
-        forged_sig.correction_auth_tag = "bypassed"
-        forged_sig.classical_pub_key = "bypassed"
-        
-        # Monkeypatch the verifier's classical check for this iteration
-        original_verify = verifier.verify
-        
-        # Bob re-derives spec
-        expected_spec = derive_signing_spec(msg_hash, ctx, n_qubits)
-        
-        # Manually count mismatches based on Bob's spec vs Eve's teleported states
-        n_mismatches = 0
-        from qiskit import QuantumCircuit
-        
-        for i, spec in enumerate(expected_spec):
-            basis = spec["basis"]
-            expected_state = spec["state"]
-            sv = forged_sig.teleported_states[i]["statevector"]
-            
-            qc = QuantumCircuit(3, 1)
-            qc.initialize(np.asarray(sv), [0, 1, 2])
-            
-            if basis == "X":
-                qc.h(2)
-                
-            qc.measure(2, 0)
-            
-            # Since Eve just guessed the state preparation, when we measure
-            # it we simulate the true physical outcome
-            counts = verifier.sim.run(qc, shots=1).result().get_counts()
-            measured_bit = list(counts.keys())[0]
-            
-            expected_bit = '1' if expected_state in ['|1>', '|->'] else '0'
-            if measured_bit != expected_bit:
-                n_mismatches += 1
-                
-        mismatches_collected.append(n_mismatches / n_qubits)
-        
-    mean_mismatch_rate = np.mean(mismatches_collected)
-    
-    # Theoretical expectation:
-    # 50% of the time Eve guesses basis wrong -> 50% mismatch on those = 25% overall
-    # 50% of the time Eve guesses basis right -> 50% mismatch on those = 25% overall
-    # Wait, if Eve guesses right basis but random state, she is wrong 50% of the time.
-    # Total mismatch probability per qubit = 0.5 * 0.5 (wrong basis) + 0.5 * 0.5 (right basis, wrong state) = 0.5
-    # Let's check Eve's forge_signature implementation:
-    # basis = random, state_bit = random.
-    # If she guesses basis right, she guesses state right 50% of time.
-    # If she guesses basis wrong, she gets outcome right 50% of time.
-    # So expected mismatch is 50%.
-    
-    # In threat_engine.py, we model adversary_success = 0.75 for a slightly different attack
-    # (where adversary knows the state but not basis, or intercepts and measures).
-    # For pure random guessing, mismatch is 50%.
-    
-    assert 0.40 <= mean_mismatch_rate <= 0.60
+        # Generate fresh keys for each attempt
+        key_pair = GCKeyGenerator.generate(n_positions=n_positions, fingerprint_qubits=8)
+        reg = VerifierKeyRegister(owner="Bob")
+        for i in range(n_positions):
+            for b in (0, 1):
+                reg.store(key_pair.distribute_copy(i, b, "Bob"))
+
+        msg = b"TRANSFER $1,000,000"
+        forged_sig = Eve.forge_gc_signature(message=msg, n_positions=n_positions, key_bytes=16)
+
+        verifier = GCVerifier(acceptance_threshold=0.05, rejection_threshold=0.20)
+        res = verifier.verify(signature=forged_sig, key_register=reg, message=msg)
+
+        # For Bob, any forgery must be rejected (outcome must NOT be 1-ACC)
+        assert res.outcome != VerificationOutcome.ACC_1
+        mismatches_collected.append(res.mismatch_rate)
+
+    mean_mismatch = float(np.mean(mismatches_collected))
+    # Overlap ≈ 0 implies SWAP test fails ~50% of the time
+    assert 0.35 <= mean_mismatch <= 0.65
+
+
+def test_gc_forgery_bound_calculation():
+    """Verify that GCForgeryModel computes the expected theoretical bound."""
+    p_forge = GCForgeryModel.compute_forgery_bound(
+        m_positions=32,
+        threshold_fraction=0.05,
+        overlap=0.15,
+        key_bits=128,
+        max_copies=4,
+        fingerprint_qubits=8
+    )
+    # With 32 positions, threshold 5% (max 1 error) and p_error ~ 0.49:
+    # Binom(32, 0.49) <= 1 error is < 1e-4
+    assert p_forge < 1e-4
+
+    sec_bits = GCForgeryModel.compute_security_level(
+        m_positions=32,
+        threshold_fraction=0.05
+    )
+    assert sec_bits >= 15
+
+
+def test_holevo_key_secrecy_bound():
+    """Verify Holevo's theorem accessible-information budget and entropy gap indicator."""
+    acc_info = GCForgeryModel.holevo_accessible_information(max_copies=4, fingerprint_qubits=8)
+    assert acc_info == 32  # T·n = 4 × 8 = 32 bits accessible information budget
+
+    margin = GCForgeryModel.holevo_margin(key_bits=128, max_copies=4, fingerprint_qubits=8)
+    assert margin == 96  # L - T·n = 128 - 32 = 96 bits of entropy gap
+
+    # Positive entropy gap means key is not revealed; forgery is determined by SWAP test binomial distribution
+    p_forge = GCForgeryModel.compute_forgery_bound(m_positions=32, threshold_fraction=0.05)
+    assert p_forge < 1e-4
+
+    # Depleted entropy gap (margin <= 0) collapses security to 1.0
+    p_depleted = GCForgeryModel.compute_forgery_bound(
+        m_positions=32, threshold_fraction=0.05, key_bits=32, max_copies=4, fingerprint_qubits=8
+    )
+    assert p_depleted == 1.0

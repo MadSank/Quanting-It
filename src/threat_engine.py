@@ -68,6 +68,26 @@ class ThreatScore:
 
     is_accepted: bool = True
 
+    @property
+    def overall_threat_score(self) -> float:
+        """Derived continuous threat severity score (0.0 to 1.0)."""
+        if self.is_accepted:
+            return round(max(0.0, min(1.0, self.qds_mismatch_rate * 2.0 + (1.0 - self.overall_confidence) * 0.1)), 2)
+        return round(max(0.6, min(1.0, 1.0 - self.overall_confidence + 0.4)), 2)
+
+    @property
+    def threat_level(self) -> str:
+        """Categorical threat rating based on overall assessment."""
+        score = self.overall_threat_score
+        if score >= 0.8:
+            return "CRITICAL"
+        elif score >= 0.5:
+            return "HIGH"
+        elif score >= 0.2:
+            return "MEDIUM"
+        else:
+            return "LOW"
+
 
 class ForgeryModel:
     """
@@ -306,5 +326,267 @@ class ThreatScorer:
             ml_dsa_valid=ml_dsa_valid,
             overall_confidence=overall_confidence,
             threat_assessment=threat_assessment,
+            is_accepted=is_accepted,
+        )
+
+
+# ===========================================================================
+#  Gottesman-Chuang QDS Threat Engine Extensions
+# ===========================================================================
+
+class GCForgeryModel:
+    """
+    Mathematical model for Gottesman-Chuang QDS forgery and transferability bounds.
+
+    Security is based on two core principles:
+    1. Holevo's Theorem (Information-Theoretic Key Secrecy):
+       L-bit private key k. Adversary with T copies of n-qubit states |f_k⟩
+       has an accessible-information budget bounded by approximately χ ≤ T·n
+       classical bits under standard assumptions.
+       The quantity ΔH = L - T·n represents the remaining entropy/information gap indicator.
+       When ΔH > 0 (e.g., 128 - 4*8 = 96 bits), the public states do not provide
+       sufficient classical mutual information to uniquely determine the L-bit key k.
+       NOTE: ΔH is an entropy gap indicator, NOT an inversion/forgery probability.
+       Do NOT derive 2^-96 from this alone.
+    2. SWAP Test Statistics (Overlap Discrimination):
+       For an unrevealed key where adversary guesses a candidate k', the empirical
+       overlap |⟨f_k|f_k'⟩| = |1 - 2 d_H/N| ≈ 0.
+       SWAP test single-position mismatch prob: p_mismatch = (1 - |overlap|²)/2 ≈ 0.50.
+       For M positions and threshold c₁: P_swap_forge = Binomial_CDF(c₁·M, M, p_mismatch).
+    """
+
+    DEFAULT_KEY_BITS = 128
+    DEFAULT_FINGERPRINT_QUBITS = 8
+    DEFAULT_MAX_COPIES = 4
+    DEFAULT_EMPIRICAL_OVERLAP = 0.15
+
+    @staticmethod
+    def holevo_accessible_information(max_copies: int = DEFAULT_MAX_COPIES,
+                                      fingerprint_qubits: int = DEFAULT_FINGERPRINT_QUBITS) -> int:
+        """Accessible-information budget bounded by approximately T·n classical bits."""
+        return max_copies * fingerprint_qubits
+
+    @staticmethod
+    def holevo_margin(key_bits: int = DEFAULT_KEY_BITS,
+                      max_copies: int = DEFAULT_MAX_COPIES,
+                      fingerprint_qubits: int = DEFAULT_FINGERPRINT_QUBITS) -> int:
+        """
+        Compute the Holevo information/entropy gap indicator ΔH = L - T·n.
+        A positive gap indicates that public keys reveal fewer bits than the key length L.
+        """
+        return key_bits - max_copies * fingerprint_qubits
+
+    @staticmethod
+    def holevo_inversion_bound(key_bits: int = DEFAULT_KEY_BITS,
+                              max_copies: int = DEFAULT_MAX_COPIES,
+                              fingerprint_qubits: int = DEFAULT_FINGERPRINT_QUBITS) -> float:
+        """
+        Entropy gap indicator:
+        Mathematically, ΔH = L - T·n is an entropy gap indicator, not a direct inversion probability.
+        If ΔH <= 0, the adversary can potentially learn all key bits (returns 1.0).
+        If ΔH > 0, returns 2^(-ΔH) as an entropy-gap indicator.
+        """
+        margin = GCForgeryModel.holevo_margin(key_bits, max_copies, fingerprint_qubits)
+        if margin <= 0:
+            return 1.0
+        return float(2.0 ** (-margin))
+
+    @staticmethod
+    def swap_test_mismatch_prob(overlap: float = DEFAULT_EMPIRICAL_OVERLAP) -> float:
+        """Mismatch probability per position for states with given overlap."""
+        p_acc = (1.0 + (overlap ** 2)) / 2.0
+        return 1.0 - p_acc
+
+    @staticmethod
+    def compute_forgery_bound(
+        m_positions: int,
+        threshold_fraction: float,
+        overlap: float = DEFAULT_EMPIRICAL_OVERLAP,
+        key_bits: int = DEFAULT_KEY_BITS,
+        max_copies: int = DEFAULT_MAX_COPIES,
+        fingerprint_qubits: int = DEFAULT_FINGERPRINT_QUBITS
+    ) -> float:
+        """
+        Compute total forgery probability upper bound based on SWAP test binomial distribution.
+        
+        Conditioned on the Holevo entropy gap ΔH = L - T·n > 0 (meaning public keys do not
+        contain enough mutual information to reconstruct private key k), the adversary's
+        candidate key k' yields near-zero state overlap with |f_k⟩. The probability of
+        passing verification across M positions with threshold fraction c1 is given by
+        the binomial tail CDF: P(mismatches <= c1 * M).
+        
+        If the entropy gap is zero or negative (ΔH <= 0), public key states reveal >= L bits,
+        so information-theoretic security does not hold (P_forge = 1.0).
+        """
+        margin = GCForgeryModel.holevo_margin(key_bits, max_copies, fingerprint_qubits)
+        if margin <= 0:
+            return 1.0
+
+        c1 = int(math.floor(m_positions * threshold_fraction))
+        p_mismatch = GCForgeryModel.swap_test_mismatch_prob(overlap)
+        p_swap = float(binom.cdf(c1, m_positions, p_mismatch))
+        return min(1.0, p_swap)
+
+    @staticmethod
+    def compute_security_level(
+        m_positions: int,
+        threshold_fraction: float,
+        overlap: float = DEFAULT_EMPIRICAL_OVERLAP,
+        key_bits: int = DEFAULT_KEY_BITS,
+        max_copies: int = DEFAULT_MAX_COPIES,
+        fingerprint_qubits: int = DEFAULT_FINGERPRINT_QUBITS
+    ) -> int:
+        """Compute security level in bits: -log₂(P_forge)."""
+        p_forge = GCForgeryModel.compute_forgery_bound(
+            m_positions, threshold_fraction, overlap, key_bits, max_copies, fingerprint_qubits
+        )
+        if p_forge <= 0:
+            return 256
+        if p_forge >= 1.0:
+            return 0
+        return int(math.floor(-math.log2(p_forge)))
+
+    @staticmethod
+    def calibrate_thresholds(
+        m_positions: int,
+        honest_error_rate: float = 0.0,
+        adversary_overlap: float = DEFAULT_EMPIRICAL_OVERLAP,
+        target_false_reject_prob: float = 1e-4,
+        target_forgery_prob: float = 1e-4,
+    ) -> dict:
+        """
+        Calibrate Bob's threshold c1 and Charlie's threshold c2.
+
+        Gottesman-Chuang requires:
+        0 ≤ c1 < c2 ≤ M
+        - Bob accepts if mismatches ≤ c1
+        - Charlie (transfer recipient) accepts if mismatches ≤ c2
+        - Alice cannot repudiate because if Bob accepts (≤ c1 errors),
+          with high probability Charlie also observes ≤ c2 errors.
+        """
+        p_adv_mismatch = GCForgeryModel.swap_test_mismatch_prob(adversary_overlap)
+        p_honest_mismatch = max(1e-6, honest_error_rate)
+
+        # Find maximum c1 such that P(adversary <= c1) <= target_forgery_prob
+        best_c1 = 0
+        for c in range(m_positions):
+            p_forg = float(binom.cdf(c, m_positions, p_adv_mismatch))
+            if p_forg <= target_forgery_prob:
+                best_c1 = c
+            else:
+                break
+
+        # Find minimum c2 > c1 such that margin c2 - c1 provides repudiation protection
+        best_c2 = min(m_positions - 1, max(best_c1 + 1, int(m_positions * 0.25)))
+
+        return {
+            "m_positions": m_positions,
+            "c1": best_c1,
+            "c2": best_c2,
+            "threshold_bob_fraction": best_c1 / m_positions,
+            "threshold_charlie_fraction": best_c2 / m_positions,
+            "adv_mismatch_prob": p_adv_mismatch,
+            "forgery_prob_at_c1": float(binom.cdf(best_c1, m_positions, p_adv_mismatch)),
+            "margin": best_c2 - best_c1,
+        }
+
+
+class GCThreatScorer:
+    """
+    Threat scorer for the Gottesman-Chuang QDS architecture.
+    Evaluates SWAP test results, Holevo bounds, copy budgets, and classical checks.
+    """
+
+    def __init__(self, c1_threshold_fraction: float = 0.10,
+                 c2_threshold_fraction: float = 0.25,
+                 e91_threshold: float = 0.15):
+        self.c1_threshold_fraction = c1_threshold_fraction
+        self.c2_threshold_fraction = c2_threshold_fraction
+        self.e91_threshold = e91_threshold
+
+    def evaluate_gc(
+        self,
+        m_positions: int,
+        n_mismatches: int,
+        is_transfer: bool = False,
+        e91_error_rate: float = 0.0,
+        classical_hash_valid: bool = True,
+        session_valid: bool = True,
+        replay_valid: bool = True,
+        copy_available: bool = True,
+        ml_dsa_valid: bool = True,
+    ) -> ThreatScore:
+        """
+        Evaluate GC QDS verification.
+        """
+        threshold_fraction = self.c2_threshold_fraction if is_transfer else self.c1_threshold_fraction
+        mismatch_rate = n_mismatches / m_positions if m_positions > 0 else 1.0
+
+        forgery_bound = GCForgeryModel.compute_forgery_bound(
+            m_positions, threshold_fraction
+        )
+        sec_bits = GCForgeryModel.compute_security_level(
+            m_positions, threshold_fraction
+        )
+
+        qds_ok = (mismatch_rate <= threshold_fraction) and copy_available
+        e91_ok = e91_error_rate <= self.e91_threshold
+        all_classical_ok = (
+            classical_hash_valid and session_valid
+            and replay_valid and ml_dsa_valid
+        )
+
+        is_accepted = qds_ok and e91_ok and all_classical_ok
+
+        # Confidence calculation
+        qds_conf = max(0.0, 1.0 - (mismatch_rate / threshold_fraction)) if threshold_fraction > 0 else 1.0
+        e91_conf = max(0.0, 1.0 - (e91_error_rate / self.e91_threshold)) if self.e91_threshold > 0 else 1.0
+        classical_conf = 1.0 if all_classical_ok else 0.0
+        overall_confidence = min(1.0, 0.45 * qds_conf + 0.15 * e91_conf + 0.40 * classical_conf)
+        if not is_accepted:
+            overall_confidence = min(overall_confidence, 0.25)
+
+        role = "Charlie (transfer)" if is_transfer else "Bob (primary verifier)"
+        parts = [
+            f"GC QDS verification by {role}: ",
+            f"SWAP test mismatches {n_mismatches}/{m_positions} ({mismatch_rate*100:.1f}%), ",
+            f"threshold {threshold_fraction*100:.1f}%. ",
+        ]
+        if qds_ok:
+            parts.append(f"QDS verified within tolerance. Forgery bound < 2^-{sec_bits}. ")
+        else:
+            if not copy_available:
+                parts.append("REJECTED: Public key copy exhausted or unavailable (no-cloning violation). ")
+            else:
+                parts.append("REJECTED: SWAP test mismatch count exceeds threshold. ")
+
+        if not all_classical_ok:
+            parts.append("Classical checks failed. ")
+
+        verdict = "ACCEPT" if is_accepted else "REJECT"
+        parts.append(f"VERDICT: {verdict} (confidence {overall_confidence*100:.1f}%).")
+
+        return ThreatScore(
+            qds_mismatch_rate=mismatch_rate,
+            qds_threshold=threshold_fraction,
+            qds_forgery_bound=forgery_bound,
+            qds_security_bits=sec_bits,
+            qds_n_qubits=m_positions,
+            qds_n_mismatches=n_mismatches,
+            e91_error_rate=e91_error_rate,
+            e91_threshold=self.e91_threshold,
+            classical_hash_valid=classical_hash_valid,
+            correction_bits_valid=copy_available,
+            session_valid=session_valid,
+            replay_valid=replay_valid,
+            ml_dsa_valid=ml_dsa_valid,
+            overall_confidence=overall_confidence,
+            threat_assessment="".join(parts),
+            protocol_model="THREE_PARTY_GC_QDS",
+            non_repudiation_warning=(
+                "Full Gottesman-Chuang QDS: Alice signs via classical key release; "
+                "Bob and Charlie independently verify against quantum public key copies via SWAP test. "
+                "Non-repudiation holds under no-cloning and Holevo bounds."
+            ),
             is_accepted=is_accepted,
         )

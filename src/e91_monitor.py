@@ -14,7 +14,7 @@ class E91Monitor:
     are maintained. Disturbance caused by Eve (e.g., intercept-resend) will 
     degrade these correlations and be detected.
     """
-    def __init__(self, num_pairs: int = 50, error_threshold: float = 0.15):
+    def __init__(self, num_pairs: int = 100, error_threshold: float = 0.15):
         self.num_pairs = num_pairs
         self.error_threshold = error_threshold
         self.sim = AerSimulator()

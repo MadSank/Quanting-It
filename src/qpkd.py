@@ -1,12 +1,10 @@
 """
-[E91-BASED QUANTUM PUBLIC-KEY DISTRIBUTION]
+[E91-INSPIRED BELL-CORRELATION MONITORING & DISTRIBUTION]
 
 First-class pipeline stage implementing Bell-state entanglement distribution
-between Alice and Bob. Uses E91-style correlation verification to detect
+between Alice and Bob. Uses E91-inspired Bell-correlation monitoring to detect
 eavesdropping during the key distribution phase itself.
-
-This replaces the old seeded-PRNG "correlated bitstring" with actual
-Bell pair circuit simulation on qiskit_aer.
+Does NOT claim complete E91 QKD; provides Bell-correlation channel monitoring.
 """
 
 import hashlib

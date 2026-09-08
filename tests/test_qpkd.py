@@ -2,7 +2,7 @@ import pytest
 from src.qpkd import QPKDSession
 
 def test_qpkd_distribution_clean_channel():
-    """Test E91 QPKD distribution under noiseless conditions."""
+    """Test E91-inspired Bell-correlation monitoring and distribution under noiseless conditions."""
     session = QPKDSession(session_id="test_session", error_threshold=0.15)
     
     # 64 signature pairs, 50 monitor pairs
@@ -21,7 +21,7 @@ def test_qpkd_distribution_clean_channel():
 
 def test_qpkd_detects_e91_disturbance():
     """
-    Test E91 QPKD fails when disturbance is injected.
+    Test E91-inspired Bell-correlation monitoring detects injected disturbance.
     We mock the measurement outcome to simulate Eve's interference.
     """
     session = QPKDSession(session_id="test_session", error_threshold=0.15)

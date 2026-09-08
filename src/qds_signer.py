@@ -1,216 +1,173 @@
 """
-[QUANTUM DIGITAL SIGNATURE - SIGNING]
+GC QDS Signer — Gottesman–Chuang Quantum Digital Signature Signing
+===================================================================
 
-Alice's QDS signing module. This IS the signature — not a supplement to PQC.
+Implements the signing phase of the GC QDS protocol.
 
-Protocol:
-1. Message hash determines a signing specification (basis + state per qubit).
-2. Alice prepares Pauli eigenstates per the spec.
-3. Each state is teleported through pre-distributed Bell pairs.
-4. Classical correction bits (crz/crx) are collected and signed with ML-DSA.
+Per GC (quant-ph/0105032, Section 4):
+  To sign a single-bit message b, Alice sends:
+    (b, k_b^1, k_b^2, ..., k_b^M)
 
-Trust anchor: Only Alice, holding her halves of the pre-distributed Bell pairs,
-can produce teleported states that Bob's halves will reconstruct correctly.
+  That is, for each position i, Alice reveals the classical private key
+  corresponding to message bit b_i.
+
+For multi-bit messages, we encode the message into M bits:
+  - If len(message) <= M bits: direct binary encoding
+  - Otherwise: SHA-256 hash → M-bit digest (configurable)
+
+The signature is the set of revealed classical private keys plus
+the message encoding and session metadata.
+
+ML-DSA is used as an AUXILIARY classical authentication layer for
+the transcript — it is NOT the QDS itself.
 """
 
-import hashlib
-import uuid
-from dataclasses import dataclass, field
-from typing import List, Dict, Any, Optional
+from __future__ import annotations
 
-from qiskit import QuantumCircuit
-from src.teleportation import create_teleportation_circuit, simulate_teleportation
-from src.quantum_resources import SessionResourceManager, ResourceType
-from src.classical_channel import ClassicalChannelAuth
+import hashlib
+from dataclasses import dataclass, field
+
+from src.gc_keys import GCKeyPair
 
 
 @dataclass
-class QDSSignature:
+class GCSignature:
     """
-    A teleportation-based quantum digital signature.
+    A Gottesman–Chuang quantum digital signature.
+
+    Contains the revealed private keys for each signature position,
+    corresponding to the encoded message bits.
     """
-    signature_id: str
-    session_id: str
-    sequence_number: int
-    n_qubits: int
-    teleported_states: List[Dict[str, Any]]  # {statevector, crz_bit, crx_bit}
-    correction_bits: str  # Concatenated crz||crx bitstring
-    correction_auth_tag: str  # ML-DSA signature over correction bits
-    signing_spec_hash: str  # Hash of the spec for Bob's re-derivation
-    classical_pub_key: str  # ML-DSA public key for correction bit verification
+    # Message
+    message: bytes                      # Original message
+    message_bits: list[int]             # M-bit encoding of message
+    n_positions: int                    # M
+
+    # Revealed keys: for position i, the key k_{message_bits[i]}^i
+    revealed_keys: list[bytes]          # M keys, each L/8 bytes
+
+    # Protocol parameters
+    fingerprint_qubits: int             # n
+    private_key_bits: int               # L
+
+    # Session binding
+    session_id: str = ""
+    sequence_number: int = 0
+
+    # Auxiliary classical authentication (ML-DSA)
+    classical_auth_tag: str = ""
+    classical_pub_key: str = ""
+
+    @property
+    def n_qubits(self) -> int:
+        return self.n_positions
+
+    @property
+    def correction_bits(self) -> str:
+        return b"".join(self.revealed_keys).hex()
+
+    @property
+    def correction_auth_tag(self) -> str:
+        return self.classical_auth_tag
+
+    @correction_auth_tag.setter
+    def correction_auth_tag(self, val: str) -> None:
+        self.classical_auth_tag = val
+
+    @property
+    def teleported_states(self) -> list:
+        return []
 
 
-def derive_signing_spec(message_hash: str, session_auth_context: str,
-                        n_qubits: int) -> List[Dict[str, Any]]:
+class GCSigner:
     """
-    Deterministically derive the signing specification from the message hash
-    and session authentication context.
+    Implements GC-style quantum digital signature signing.
 
-    Encoding (BB84-style Pauli eigenstates):
-    - Auth context bit → basis selection (0=Z, 1=X)
-    - Hash bit → state selection:
-      - Z-basis: 0→|0⟩, 1→|1⟩
-      - X-basis: 0→|+⟩, 1→|−⟩
-
-    Args:
-        message_hash: SHA-256 hex digest of the message binding
-        session_auth_context: SHA-256 hex digest from QPKD phase
-        n_qubits: Number of signature qubits (64 or 128)
-
-    Returns:
-        List of {basis, state, binding_bit} specifications
-    """
-    spec = []
-
-    # Extend hash material if n_qubits > 256 bits
-    # For 64 or 128 qubits, a single SHA-256 is sufficient
-    hash_bin = bin(int(message_hash, 16))[2:].zfill(256)
-    ctx_bin = bin(int(session_auth_context, 16))[2:].zfill(256)
-
-    for i in range(n_qubits):
-        binding_bit = int(hash_bin[i % 256])
-        basis_selector = int(ctx_bin[i % 256])
-
-        basis = "X" if basis_selector == 1 else "Z"
-
-        if basis == "Z":
-            state = "|1>" if binding_bit == 1 else "|0>"
-        else:
-            state = "|->" if binding_bit == 1 else "|+>"
-
-        spec.append({
-            "binding_bit": binding_bit,
-            "basis": basis,
-            "state": state,
-        })
-
-    return spec
-
-
-def prepare_signing_state(expected_state: str) -> QuantumCircuit:
-    """
-    Prepare a Pauli eigenstate on a single qubit.
-
-    |0⟩ → identity (default)
-    |1⟩ → X gate
-    |+⟩ → H gate
-    |−⟩ → X then H gate
-    """
-    qc = QuantumCircuit(1)
-    if expected_state == "|1>":
-        qc.x(0)
-    elif expected_state == "|+>":
-        qc.h(0)
-    elif expected_state == "|->":
-        qc.x(0)
-        qc.h(0)
-    # |0> is default
-    return qc
-
-
-class QDSSigner:
-    """
-    Alice's QDS signing engine.
+    Alice uses this to sign a message by revealing the appropriate
+    private keys from her GC key pair.
     """
 
     @staticmethod
-    def sign(message_hash: str, session_auth_context: str,
-             resource_manager: SessionResourceManager,
-             session_id: str, sequence_number: int,
-             n_qubits: int = 64,
-             classical_priv_key: Any = None,
-             classical_pub_key: str = None) -> QDSSignature:
+    def encode_message(message: bytes, n_positions: int) -> list[int]:
         """
-        Generate a teleportation-based quantum digital signature.
+        Encode a message into M bits for signing.
+
+        For the prototype, we hash the message with SHA-256 and take
+        the first M bits. This provides domain separation and fixed-length
+        encoding.
+
+        # NOTE: SHA-256 is used here for MESSAGE HASHING / DOMAIN BINDING.
+        # Key expansion in qowf.encode() is a deterministic pseudorandom
+        # codeword/fingerprint encoding for the prototype, not a formal ECC.
 
         Args:
-            message_hash: SHA-256 hash of the message binding
-            session_auth_context: From QPKD phase
-            resource_manager: Manages Bell pair resources
-            session_id: Current session ID
-            sequence_number: Message sequence number
-            n_qubits: Signature length (64 or 128)
-            classical_priv_key: ML-DSA private key for correction bit signing
-            classical_pub_key: ML-DSA public key hex
+            message: Arbitrary message bytes.
+            n_positions: M — number of signature positions.
 
         Returns:
-            QDSSignature containing teleported states and auth tags
+            List of M bits (0 or 1).
         """
-        # 1. Derive signing specification
-        spec = derive_signing_spec(message_hash, session_auth_context, n_qubits)
-        spec_hash = hashlib.sha256(
-            str(spec).encode('utf-8')
-        ).hexdigest()
+        h = hashlib.sha256(message).digest()
+        # Extract M bits from the hash
+        bits = []
+        for byte_val in h:
+            for bit_pos in range(8):
+                if len(bits) < n_positions:
+                    bits.append((byte_val >> bit_pos) & 1)
+        # If M > 256 (SHA-256 output), extend with another hash
+        if len(bits) < n_positions:
+            h2 = hashlib.sha256(h + b"extend").digest()
+            for byte_val in h2:
+                for bit_pos in range(8):
+                    if len(bits) < n_positions:
+                        bits.append((byte_val >> bit_pos) & 1)
+        return bits[:n_positions]
 
-        # 2. Consume Bell pair resources
-        available_pairs = [
-            k for k, v in resource_manager.resources.items()
-            if v.resource_type == ResourceType.SIGNATURE_PAIR
-            and v.status.name == "UNUSED"
-        ]
-        if len(available_pairs) < n_qubits:
-            raise ValueError(
-                f"Not enough SIGNATURE_PAIR resources: need {n_qubits}, "
-                f"have {len(available_pairs)}"
-            )
+    @staticmethod
+    def sign(
+        message: bytes,
+        key_pair: GCKeyPair,
+        session_id: str = "",
+        sequence_number: int = 0,
+    ) -> GCSignature:
+        """
+        Sign a message using the GC QDS protocol.
 
-        # 3. Prepare, teleport, and record each signature qubit
-        teleported_states = []
-        correction_bits_list = []
+        For each position i, reveals k_{b_i}^i where b_i is the i-th
+        bit of the encoded message.
 
-        for i, s in enumerate(spec):
-            pair_id = available_pairs[i]
-            resource_manager.consume_resource(pair_id)
+        IMPORTANT: Bob does NOT possess Alice's private keys.
+        Bob does NOT derive the expected signature from a shared secret.
+        The signature IS the revealed private keys themselves.
 
-            # Prepare the Pauli eigenstate
-            prep_qc = prepare_signing_state(s["state"])
+        Args:
+            message: The message to sign (arbitrary bytes).
+            key_pair: Alice's GC key pair.
+            session_id: Session identifier for binding.
+            sequence_number: Sequence number for replay protection.
 
-            # Create and simulate teleportation circuit
-            teleport_qc = create_teleportation_circuit(prep_qc)
-            result = simulate_teleportation(teleport_qc)
+        Returns:
+            GCSignature containing the revealed private keys.
+        """
+        message_bits = GCSigner.encode_message(message, key_pair.n_positions)
 
-            # Extract classical correction bits from measurement counts
-            counts = result.get("counts", {})
-            if counts:
-                outcome = list(counts.keys())[0]
-                # Parse Qiskit multi-register format: "crx crz" (space separated)
-                parts = outcome.split()
-                if len(parts) == 2:
-                    crx_bit = int(parts[0])
-                    crz_bit = int(parts[1])
-                else:
-                    crz_bit = 0
-                    crx_bit = 0
-            else:
-                crz_bit = 0
-                crx_bit = 0
+        revealed_keys = []
+        for i in range(key_pair.n_positions):
+            bit = message_bits[i]
+            pk = key_pair.private_keys[i]
+            revealed_keys.append(pk.get_key_for_bit(bit))
 
-            teleported_states.append({
-                "symbol_index": i,
-                "statevector": result["statevector"],
-                "crz_bit": crz_bit,
-                "crx_bit": crx_bit,
-            })
-            correction_bits_list.append(f"{crz_bit}{crx_bit}")
-
-        # 4. Build correction bitstring and sign with ML-DSA
-        correction_bits = "".join(correction_bits_list)
-
-        if classical_priv_key is not None and classical_pub_key is not None:
-            correction_auth_tag = ClassicalChannelAuth.sign_correction_bits(
-                correction_bits, session_id, sequence_number, classical_priv_key
-            )
-        else:
-            correction_auth_tag = ""
-
-        return QDSSignature(
-            signature_id=str(uuid.uuid4()),
+        return GCSignature(
+            message=message,
+            message_bits=message_bits,
+            n_positions=key_pair.n_positions,
+            revealed_keys=revealed_keys,
+            fingerprint_qubits=key_pair.fingerprint_qubits,
+            private_key_bits=key_pair.private_key_length,
             session_id=session_id,
             sequence_number=sequence_number,
-            n_qubits=n_qubits,
-            teleported_states=teleported_states,
-            correction_bits=correction_bits,
-            correction_auth_tag=correction_auth_tag,
-            signing_spec_hash=spec_hash,
-            classical_pub_key=classical_pub_key or "",
         )
+
+
+QDSSigner = GCSigner
+QDSSignature = GCSignature

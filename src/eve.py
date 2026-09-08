@@ -6,7 +6,7 @@ from qiskit import QuantumCircuit
 from qiskit.quantum_info import Statevector
 
 from src.packet import SecurePacket
-from src.qds_signer import QDSSignature
+from src.qds_signer import GCSignature, QDSSignature
 from src.teleportation import create_teleportation_circuit, simulate_teleportation
 
 class Eve:
@@ -55,75 +55,24 @@ class Eve:
         return tampered
 
     @staticmethod
-    def forge_signature(message_hash: str, auth_context: str, n_qubits: int = 64, session_id: str = "forged_session", seq_num: int = 1) -> QDSSignature:
+    def forge_signature(
+        message_hash: str = "",
+        auth_context: str = "",
+        n_qubits: int = 64,
+        session_id: str = "forged_session",
+        seq_num: int = 1,
+        message: bytes = b"FORGED",
+    ) -> GCSignature:
         """
         Eve attempts to forge a signature without the quantum key material.
-        She guesses the basis (Z or X) and prepares a random state.
-        This is the attack modeled by the ThreatEngine forgery bound.
+        Generates random keys for each message bit position.
         """
-        teleported_states = []
-        correction_bits_list = []
-        
-        for i in range(n_qubits):
-            basis = random.choice(['Z', 'X'])
-            state_bit = random.choice([0, 1])
-            
-            qc = QuantumCircuit(1)
-            if basis == 'Z':
-                if state_bit == 1:
-                    qc.x(0)
-            else:
-                if state_bit == 0:
-                    qc.h(0)
-                else:
-                    qc.x(0)
-                    qc.h(0)
-                    
-            # Eve simulates teleportation (without Alice's Bell pair halves)
-            teleport_qc = create_teleportation_circuit(qc)
-            result = simulate_teleportation(teleport_qc)
-            
-            counts = result.get("counts", {})
-            if counts:
-                outcome = list(counts.keys())[0]
-                parts = outcome.split()
-                if len(parts) == 2:
-                    crx_bit = int(parts[0])
-                    crz_bit = int(parts[1])
-                else:
-                    crz_bit = 0
-                    crx_bit = 0
-            else:
-                crz_bit = 0
-                crx_bit = 0
-                
-            teleported_states.append({
-                "symbol_index": i,
-                "statevector": result["statevector"],
-                "crz_bit": crz_bit,
-                "crx_bit": crx_bit,
-            })
-            correction_bits_list.append(f"{crz_bit}{crx_bit}")
-            
-        correction_bits = "".join(correction_bits_list)
-            
-        from src.classical_channel import ClassicalChannelAuth
-        eve_pub, eve_priv = ClassicalChannelAuth.generate_keys()
-        
-        auth_tag = ClassicalChannelAuth.sign_correction_bits(
-            correction_bits, session_id, seq_num, eve_priv
-        )
-            
-        return QDSSignature(
-            signature_id=str(uuid.uuid4()),
+        return Eve.forge_gc_signature(
+            message=message,
+            n_positions=n_qubits,
+            key_bytes=16,
             session_id=session_id,
             sequence_number=seq_num,
-            n_qubits=n_qubits,
-            teleported_states=teleported_states,
-            correction_bits=correction_bits,
-            correction_auth_tag=auth_tag,
-            signing_spec_hash="forged_hash",
-            classical_pub_key=eve_pub
         )
 
     @staticmethod
@@ -184,19 +133,65 @@ class Eve:
             
         return tampered_sig
 
-    @staticmethod
-    def apply_depolarizing_noise(signature: QDSSignature, error_probability: float, seed: int = None) -> QDSSignature:
-        tampered_sig = copy.deepcopy(signature)
-        rng = random.Random(seed)
-        
-        for i in range(len(signature.teleported_states)):
-            if rng.random() < error_probability:
-                op = rng.choice(["X", "Y", "Z"])
-                if op == "X":
-                    tampered_sig = Eve.apply_pauli_x(tampered_sig, [i])
-                elif op == "Y":
-                    tampered_sig = Eve.apply_pauli_y(tampered_sig, [i])
-                elif op == "Z":
-                    tampered_sig = Eve.apply_pauli_z(tampered_sig, [i])
-                    
         return tampered_sig
+
+    @staticmethod
+    def forge_gc_signature(
+        message: bytes,
+        n_positions: int = 32,
+        key_bytes: int = 16,
+        session_id: str = "forged_session",
+        sequence_number: int = 1,
+    ) -> GCSignature:
+        """
+        Eve creates a forged GC signature without knowing Alice's private keys.
+        Eve generates completely random keys for each message bit position.
+        By Holevo's theorem, Eve cannot invert Alice's public keys.
+        """
+        import os
+        from src.qds_signer import GCSigner
+        message_bits = GCSigner.encode_message(message, n_positions)
+        forged_keys = [os.urandom(key_bytes) for _ in range(n_positions)]
+        return GCSignature(
+            message=message,
+            message_bits=message_bits,
+            n_positions=n_positions,
+            revealed_keys=forged_keys,
+            fingerprint_qubits=8,
+            private_key_bits=key_bytes * 8,
+            session_id=session_id,
+            sequence_number=sequence_number,
+        )
+
+    @staticmethod
+    def tamper_revealed_key(packet: SecurePacket, position_idx: int) -> SecurePacket:
+        """Tamper with a single revealed private key in the signature."""
+        import os
+        tampered = copy.deepcopy(packet)
+        if tampered.qds_signature and hasattr(tampered.qds_signature, "revealed_keys"):
+            keys = list(tampered.qds_signature.revealed_keys)
+            if position_idx < len(keys):
+                old_key = keys[position_idx]
+                keys[position_idx] = os.urandom(len(old_key))
+                tampered.qds_signature.revealed_keys = keys
+        return tampered
+
+    @staticmethod
+    def substitute_public_key(
+        register: "VerifierKeyRegister",
+        position: int,
+        bit: int,
+        fake_state: "Statevector"
+    ) -> None:
+        """
+        Eve substitutes a verifier's stored public key copy with a fake state.
+        This tests public-key substitution detection.
+        """
+        from src.gc_keys import PublicKeyCopy, CopyStatus
+        register.copies[(position, bit)] = PublicKeyCopy(
+            position=position,
+            bit=bit,
+            statevector=fake_state,
+            status=CopyStatus.DISTRIBUTED,
+            owner=register.owner,
+        )

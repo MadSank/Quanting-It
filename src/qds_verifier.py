@@ -1,156 +1,255 @@
 """
-[QUANTUM DIGITAL SIGNATURE - VERIFICATION]
+GC QDS Verifier — Gottesman–Chuang Quantum Digital Signature Verification
+==========================================================================
 
-Bob's QDS verification module. Statistical, not binary.
+Implements the verification phase of the GC QDS protocol.
 
-Protocol:
-1. Bob re-derives the signing specification from the message hash.
-2. Verify ML-DSA auth tag on correction bits (prevents classical DoS).
-3. For each teleported qubit: apply Pauli corrections, measure in derived basis.
-4. Compute mismatch rate and pass to ThreatEngine for evaluation.
+Per GC (quant-ph/0105032, Section 4):
+  Each recipient checks each revealed key k_b^i by:
+    1. Computing |f_{k_b^i}⟩ from the revealed classical key
+    2. Performing a SWAP test against the stored quantum public key
+    3. Counting failures (mismatches)
+
+  Three-outcome acceptance:
+    s_j ≤ c₁·M  →  1-ACC (valid and transferable)
+    c₁·M < s_j < c₂·M  →  0-ACC (valid, not transferable)
+    s_j ≥ c₂·M  →  REJ (invalid)
+
+  where s_j is the number of failed SWAP tests for verifier j.
+
+The SWAP test is DESTRUCTIVE: it consumes the stored quantum public
+key copy. This is enforced via the copy budget model.
 """
 
-from dataclasses import dataclass, field
-from typing import List, Dict, Any, Optional
+from __future__ import annotations
 
-import numpy as np
-from qiskit import QuantumCircuit
+from dataclasses import dataclass
+from enum import Enum
+
+from qiskit.quantum_info import Statevector
 from qiskit_aer import AerSimulator
 
-from src.qds_signer import QDSSignature, derive_signing_spec
-from src.classical_channel import ClassicalChannelAuth
+from src.gc_keys import VerifierKeyRegister
+from src.qds_signer import GCSignature, GCSigner
+from src.qowf import encode, prepare_statevector
+from src.swap_test import run_single_shot_swap_test, analytical_acceptance_probability
+
+
+class VerificationOutcome(Enum):
+    """GC three-outcome verification result."""
+    ACC_1 = "1-ACC"     # Valid and transferable
+    ACC_0 = "0-ACC"     # Valid, not necessarily transferable
+    REJ = "REJ"         # Invalid / rejected
 
 
 @dataclass
-class QDSVerificationResult:
+class GCVerificationResult:
     """
-    Statistical verification output from Bob's QDS check.
+    Result of GC QDS signature verification.
+
+    Contains detailed per-position results and the overall decision.
     """
-    qubit_results: List[Dict[str, Any]]  # per-qubit {expected, measured, match}
-    aggregate_mismatch_rate: float
-    n_qubits: int
-    n_mismatches: int
-    is_valid: bool  # mismatch <= threshold
-    correction_bits_valid: bool  # ML-DSA tag check
+    outcome: VerificationOutcome
+    n_positions: int            # M
+    n_failures: int             # s_j — number of failed SWAP tests
+    n_passes: int               # number of passed SWAP tests
+    mismatch_rate: float        # s_j / M
+    acceptance_threshold: float # c₁
+    rejection_threshold: float  # c₂
+
+    # Per-position SWAP test results (True = pass, False = fail)
+    position_results: list[bool]
+
+    # Message consistency
+    message_bits_match: bool    # Whether message encoding is consistent
+    verifier_name: str = ""
+
+    @property
+    def is_valid(self) -> bool:
+        return self.outcome != VerificationOutcome.REJ
+
+    @property
+    def n_mismatches(self) -> int:
+        return self.n_failures
+
+    @property
+    def aggregate_mismatch_rate(self) -> float:
+        return self.mismatch_rate
+
+    @property
+    def n_qubits(self) -> int:
+        return self.n_positions
+
+    @property
+    def correction_bits_valid(self) -> bool:
+        return True
 
 
-class QDSVerifier:
+class GCVerifier:
     """
-    Bob's QDS verification engine. Performs projective measurements
-    on teleported states and computes statistical mismatch rates.
+    Implements GC-style quantum digital signature verification.
+
+    A verifier (Bob or Charlie) uses their stored quantum public keys
+    to verify a signature via SWAP tests.
     """
 
-    def __init__(self, mismatch_threshold: float = 0.05):
+    def __init__(
+        self,
+        acceptance_threshold: float = 0.0,
+        rejection_threshold: float = 0.15,
+        mismatch_threshold: float = None,
+        key_register: VerifierKeyRegister = None,
+    ):
         """
+        Initialize verifier with GC thresholds.
+
         Args:
-            mismatch_threshold: Maximum acceptable mismatch rate (default 5%)
+            acceptance_threshold: c₁ — max mismatch rate for 1-ACC.
+                In noiseless simulation, c₁ = 0.0 (honest signatures
+                always achieve zero mismatches).
+            rejection_threshold: c₂ — min mismatch rate for REJ.
+                Must satisfy c₂ > c₁. The gap c₂ - c₁ prevents
+                Alice from cheating (GC Section 7).
+            mismatch_threshold: Legacy parameter mapping to c₁.
         """
-        self.mismatch_threshold = mismatch_threshold
+        if mismatch_threshold is not None:
+            acceptance_threshold = mismatch_threshold
+            if rejection_threshold <= acceptance_threshold:
+                rejection_threshold = acceptance_threshold + 0.15
+
+        if rejection_threshold <= acceptance_threshold:
+            raise ValueError(
+                f"Rejection threshold c₂={rejection_threshold} must be > "
+                f"acceptance threshold c₁={acceptance_threshold}"
+            )
+        self.c1 = acceptance_threshold
+        self.c2 = rejection_threshold
+        self.key_register = key_register
         self.sim = AerSimulator()
 
-    def verify(self, signature: QDSSignature, message_hash: str,
-               session_auth_context: str) -> QDSVerificationResult:
+    def verify(
+        self,
+        signature: GCSignature,
+        key_register: VerifierKeyRegister = None,
+        message: bytes = None,
+        *args,
+        **kwargs,
+    ) -> GCVerificationResult:
         """
-        Verify a QDS signature by re-deriving the spec, checking correction
-        bit integrity, and performing projective measurements.
+        Verify a GC QDS signature.
 
-        Args:
-            signature: The QDSSignature to verify
-            message_hash: Independently computed message hash
-            session_auth_context: Shared auth context from QPKD
+        For each position i:
+          1. Extract revealed key k from signature
+          2. Compute |f_k⟩ from the revealed key (forward direction of QOWF)
+          3. Consume stored quantum public key copy for position i, bit b_i
+          4. Run SWAP test between computed |f_k⟩ and stored copy
+          5. Record pass/fail
 
-        Returns:
-            QDSVerificationResult with statistical mismatch data
+        Then apply threshold decision.
         """
-        # Step 1: Verify correction bit integrity (ML-DSA)
-        correction_bits_valid = True
-        if signature.correction_auth_tag and signature.classical_pub_key:
-            correction_bits_valid = ClassicalChannelAuth.verify_correction_bits(
-                signature.correction_bits,
-                signature.session_id,
-                signature.sequence_number,
-                signature.correction_auth_tag,
-                signature.classical_pub_key,
+        # Handle flexible parameter ordering for compatibility
+        if key_register is not None and not isinstance(key_register, VerifierKeyRegister):
+            if message is None:
+                message = key_register
+            key_register = self.key_register
+
+        if key_register is None:
+            key_register = self.key_register
+
+        if message is None:
+            message = getattr(signature, 'message', b"")
+
+        if isinstance(message, str):
+            message = message.encode("utf-8")
+
+        verifier_owner = key_register.owner if key_register else "Verifier"
+
+        if key_register is None:
+            # No register provided: reject due to missing public keys
+            return GCVerificationResult(
+                outcome=VerificationOutcome.REJ,
+                n_positions=signature.n_positions,
+                n_failures=signature.n_positions,
+                n_passes=0,
+                mismatch_rate=1.0,
+                acceptance_threshold=self.c1,
+                rejection_threshold=self.c2,
+                position_results=[False] * signature.n_positions,
+                message_bits_match=False,
+                verifier_name="Unregistered",
             )
 
-        if not correction_bits_valid:
-            # Classical channel tampered — reject immediately
-            return QDSVerificationResult(
-                qubit_results=[],
-                aggregate_mismatch_rate=1.0,
-                n_qubits=signature.n_qubits,
-                n_mismatches=signature.n_qubits,
-                is_valid=False,
-                correction_bits_valid=False,
+        # Step 0: Re-encode the message to verify consistency
+        expected_bits = GCSigner.encode_message(message, signature.n_positions)
+        message_bits_match = (expected_bits == signature.message_bits)
+
+        # If message encoding doesn't match, reject immediately
+        if not message_bits_match:
+            return GCVerificationResult(
+                outcome=VerificationOutcome.REJ,
+                n_positions=signature.n_positions,
+                n_failures=signature.n_positions,
+                n_passes=0,
+                mismatch_rate=1.0,
+                acceptance_threshold=self.c1,
+                rejection_threshold=self.c2,
+                position_results=[False] * signature.n_positions,
+                message_bits_match=False,
+                verifier_name=key_register.owner,
             )
 
-        # Step 2: Re-derive signing specification
-        expected_spec = derive_signing_spec(
-            message_hash, session_auth_context, signature.n_qubits
-        )
+        position_results = []
+        n_failures = 0
 
-        # Step 3: Projective measurement on each teleported qubit
-        qubit_results = []
-        n_mismatches = 0
+        for i in range(signature.n_positions):
+            bit = signature.message_bits[i]
+            revealed_key = signature.revealed_keys[i]
 
-        for i, spec in enumerate(expected_spec):
-            if i >= len(signature.teleported_states):
-                # Missing qubit — automatic mismatch
-                qubit_results.append({
-                    "index": i,
-                    "expected_state": spec["state"],
-                    "expected_bit": '1' if spec["state"] in ['|1>', '|->'] else '0',
-                    "measured_bit": None,
-                    "match": False,
-                })
-                n_mismatches += 1
+            # Step 1: Compute |f_k⟩ from revealed key
+            codeword = encode(revealed_key, signature.fingerprint_qubits)
+            fresh_state = prepare_statevector(codeword, signature.fingerprint_qubits)
+
+            # Step 2: Consume stored quantum public key copy
+            try:
+                stored_state = key_register.consume_copy(i, bit)
+            except (KeyError, RuntimeError):
+                # No available copy → fail this position
+                position_results.append(False)
+                n_failures += 1
                 continue
 
-            basis = spec["basis"]
-            expected_state = spec["state"]
-            sv = signature.teleported_states[i]["statevector"]
-            sv_arr = np.asarray(sv)
+            # Step 3: SWAP test
+            passed = run_single_shot_swap_test(
+                fresh_state, stored_state,
+                signature.fingerprint_qubits,
+                sim=self.sim,
+            )
+            position_results.append(passed)
+            if not passed:
+                n_failures += 1
 
-            # Build measurement circuit
-            # The statevector is for the full 3-qubit teleportation system.
-            # Qubit 2 (MSB in Qiskit) is Bob's reconstructed qubit.
-            qc = QuantumCircuit(3, 1)
-            qc.initialize(sv_arr, [0, 1, 2])
+        # Step 4: Threshold decision
+        mismatch_rate = n_failures / signature.n_positions if signature.n_positions > 0 else 0.0
 
-            # Apply basis rotation for measurement
-            if basis == "X":
-                qc.h(2)
+        if mismatch_rate <= self.c1:
+            outcome = VerificationOutcome.ACC_1
+        elif mismatch_rate < self.c2:
+            outcome = VerificationOutcome.ACC_0
+        else:
+            outcome = VerificationOutcome.REJ
 
-            qc.measure(2, 0)
-
-            # Single-shot measurement (ideal noiseless simulation)
-            counts = self.sim.run(qc, shots=1).result().get_counts()
-            measured_bit = list(counts.keys())[0]
-
-            expected_bit = '1' if expected_state in ['|1>', '|->'] else '0'
-            match = measured_bit == expected_bit
-
-            if not match:
-                n_mismatches += 1
-
-            qubit_results.append({
-                "index": i,
-                "expected_state": expected_state,
-                "basis": basis,
-                "expected_bit": expected_bit,
-                "measured_bit": measured_bit,
-                "match": match,
-            })
-
-        # Step 4: Compute aggregate mismatch rate
-        aggregate_mismatch_rate = n_mismatches / signature.n_qubits if signature.n_qubits > 0 else 1.0
-        is_valid = aggregate_mismatch_rate <= self.mismatch_threshold
-
-        return QDSVerificationResult(
-            qubit_results=qubit_results,
-            aggregate_mismatch_rate=aggregate_mismatch_rate,
-            n_qubits=signature.n_qubits,
-            n_mismatches=n_mismatches,
-            is_valid=is_valid,
-            correction_bits_valid=correction_bits_valid,
+        return GCVerificationResult(
+            outcome=outcome,
+            n_positions=signature.n_positions,
+            n_failures=n_failures,
+            n_passes=signature.n_positions - n_failures,
+            mismatch_rate=mismatch_rate,
+            acceptance_threshold=self.c1,
+            rejection_threshold=self.c2,
+            position_results=position_results,
+            message_bits_match=message_bits_match,
+            verifier_name=key_register.owner,
         )
+
+
+QDSVerifier = GCVerifier
