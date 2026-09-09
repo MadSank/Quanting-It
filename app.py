@@ -1,9 +1,9 @@
 """
-QUATINIT: Quantum Digital Signature (QDS) Security System
-==========================================================
-Competition Demonstration UI (SIH 2026 PS 26141)
+QUATINIT: Quantum Digital Signature (QDS) Security Operations Console
+=====================================================================
+Competition Demonstration Platform (SIH 2026 Problem Statement 26141)
 
-Gottesman–Chuang Asymmetric QDS Architecture with Teleportation Transport,
+Gottesman-Chuang Asymmetric QDS Architecture with Teleportation Transport Adaptation,
 Destructive Controlled-SWAP Verification, and Multi-Layer Threat Detection.
 """
 
@@ -23,150 +23,238 @@ from src.ui_helpers import (
     verify_packet,
     transfer_to_charlie,
     execute_attack_scenario,
-    run_honest_demo_pipeline,
-    run_adversarial_demo_pipeline,
     run_teleportation_transport_demo,
     get_copy_budget_metrics,
     format_masked_key,
+    measure_e91_detailed,
+    run_staged_demo_pipeline,
+    prepare_fresh_transaction_keys,
+    are_verifier_keys_consumed,
+    ATTACK_CATALOGUE,
 )
 
 # ---------------------------------------------------------------------------
-# Streamlit Page Configuration
+# Streamlit Application Configuration
 # ---------------------------------------------------------------------------
 st.set_page_config(
-    page_title="QUATINIT | Quantum Digital Signature System",
-    page_icon="🛡️",
+    page_title="QUATINIT | Quantum Digital Signature Console",
+    page_icon=None,
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
 # ---------------------------------------------------------------------------
-# Custom Styling: Modern Cybersecurity Dark Theme
+# Theme & Visual System State Initialization (Theme persists independently)
 # ---------------------------------------------------------------------------
-st.markdown("""
-<style>
-    /* Dark Cybersecurity Base */
-    .stApp {
-        background: linear-gradient(180deg, #090d16 0%, #0d1322 100%);
-        color: #e2e8f0;
-        font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
-    }
+if "ui_theme" not in st.session_state:
+    st.session_state.ui_theme = "DARK"
 
-    /* Cards & Containers */
-    .cyber-card {
-        background: rgba(15, 23, 42, 0.75);
-        border: 1px solid rgba(56, 189, 248, 0.2);
-        border-radius: 10px;
-        padding: 16px 20px;
-        margin-bottom: 16px;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
-        backdrop-filter: blur(8px);
-    }
-    .cyber-card-accent {
-        background: rgba(15, 23, 42, 0.85);
-        border: 1px solid #38bdf8;
-        border-radius: 10px;
-        padding: 16px 20px;
-        margin-bottom: 16px;
-        box-shadow: 0 0 15px rgba(56, 189, 248, 0.25);
-    }
-    .eve-card {
-        background: rgba(45, 10, 15, 0.7);
-        border: 1px solid #ef4444;
-        border-radius: 10px;
-        padding: 16px 20px;
-        margin-bottom: 16px;
-        box-shadow: 0 0 15px rgba(239, 68, 68, 0.25);
-    }
-    .clean-card {
-        background: rgba(6, 44, 28, 0.7);
-        border: 1px solid #10b981;
-        border-radius: 10px;
-        padding: 16px 20px;
-        margin-bottom: 16px;
-        box-shadow: 0 0 15px rgba(16, 185, 129, 0.2);
-    }
-
-    /* Status Badges */
-    .badge-accept {
-        background: #064e3b;
-        color: #34d399;
-        padding: 4px 12px;
-        border-radius: 6px;
-        font-weight: 700;
-        font-size: 0.85rem;
-        border: 1px solid #059669;
-        display: inline-block;
-    }
-    .badge-reject {
-        background: #7f1d1d;
-        color: #f87171;
-        padding: 4px 12px;
-        border-radius: 6px;
-        font-weight: 700;
-        font-size: 0.85rem;
-        border: 1px solid #dc2626;
-        display: inline-block;
-    }
-    .badge-info {
-        background: #0c4a6e;
-        color: #38bdf8;
-        padding: 4px 12px;
-        border-radius: 6px;
-        font-weight: 600;
-        font-size: 0.85rem;
-        border: 1px solid #0284c7;
-        display: inline-block;
-    }
-    .badge-warning {
-        background: #78350f;
-        color: #fbbf24;
-        padding: 4px 12px;
-        border-radius: 6px;
-        font-weight: 600;
-        font-size: 0.85rem;
-        border: 1px solid #d97706;
-        display: inline-block;
-    }
-
-    /* Monospace Code / Key Text */
-    .mono-text {
-        font-family: 'Consolas', 'Courier New', monospace;
-        letter-spacing: 0.5px;
-    }
-
-    /* Diagram Nodes */
-    .flow-step {
-        display: inline-block;
-        padding: 8px 14px;
-        border-radius: 8px;
-        font-weight: 600;
-        font-size: 0.9rem;
-        text-align: center;
-    }
-    .flow-arrow {
-        display: inline-block;
-        color: #64748b;
-        font-size: 1.2rem;
-        margin: 0 8px;
-    }
-
-    /* Metric Overrides */
-    div[data-testid="stMetricValue"] {
-        font-family: 'Consolas', monospace;
-        font-weight: 700;
-        font-size: 1.8rem;
-    }
-</style>
-""", unsafe_allow_html=True)
+if "e91_history" not in st.session_state:
+    st.session_state.e91_history = []
 
 
 # ---------------------------------------------------------------------------
-# Session State Initialization (Persistent & Safe)
+# Visual System: Quantum Security Operations Console (Dark & Light Palettes)
+# ---------------------------------------------------------------------------
+def apply_console_styling(theme: str):
+    if theme == "LIGHT":
+        css = """
+        <style>
+            :root {
+                --bg-primary: #f8fafc;
+                --bg-secondary: #f1f5f9;
+                --bg-card: #ffffff;
+                --bg-card-secondary: #f8fafc;
+                --border-subtle: #cbd5e1;
+                --border-accent: #0284c7;
+                --border-alert: #dc2626;
+                --border-success: #059669;
+                --text-main: #0f172a;
+                --text-muted: #475569;
+                --text-bright: #0284c7;
+                --card-alert-bg: #fef2f2;
+                --card-success-bg: #f0fdf4;
+                --badge-accept-bg: #dcfce7;
+                --badge-accept-text: #166534;
+                --badge-accept-border: #86efac;
+                --badge-reject-bg: #fee2e2;
+                --badge-reject-text: #991b1b;
+                --badge-reject-border: #fca5a5;
+                --badge-info-bg: #e0f2fe;
+                --badge-info-text: #0369a1;
+                --badge-info-border: #7dd3fc;
+                --badge-warn-bg: #fef3c7;
+                --badge-warn-text: #92400e;
+                --badge-warn-border: #fde68a;
+            }
+            .stApp {
+                background: #f8fafc;
+                color: #0f172a;
+                font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+            }
+            header[data-testid="stHeader"] {
+                background: #f8fafc;
+            }
+            section[data-testid="stSidebar"] {
+                background-color: #f1f5f9;
+                border-right: 1px solid #cbd5e1;
+            }
+        """
+    else:  # DARK MODE
+        css = """
+        <style>
+            :root {
+                --bg-primary: #070a12;
+                --bg-secondary: #0b1120;
+                --bg-card: #0f172a;
+                --bg-card-secondary: #131d33;
+                --border-subtle: #1e293b;
+                --border-accent: #0284c7;
+                --border-alert: #b91c1c;
+                --border-success: #047857;
+                --text-main: #f8fafc;
+                --text-muted: #94a3b8;
+                --text-bright: #38bdf8;
+                --card-alert-bg: #1c0a10;
+                --card-success-bg: #061e14;
+                --badge-accept-bg: #064e3b;
+                --badge-accept-text: #34d399;
+                --badge-accept-border: #059669;
+                --badge-reject-bg: #7f1d1d;
+                --badge-reject-text: #f87171;
+                --badge-reject-border: #dc2626;
+                --badge-info-bg: #0c4a6e;
+                --badge-info-text: #38bdf8;
+                --badge-info-border: #0284c7;
+                --badge-warn-bg: #78350f;
+                --badge-warn-text: #fbbf24;
+                --badge-warn-border: #d97706;
+            }
+            .stApp {
+                background: linear-gradient(180deg, #070a12 0%, #0c1222 100%);
+                color: #f8fafc;
+                font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+            }
+            header[data-testid="stHeader"] {
+                background: #070a12;
+            }
+            section[data-testid="stSidebar"] {
+                background-color: #0b1120;
+                border-right: 1px solid #1e293b;
+            }
+        """
+
+    shared_css = """
+        /* Console Card Containers */
+        .soc-card {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 6px;
+            padding: 16px 18px;
+            margin-bottom: 14px;
+        }
+        .soc-card-accent {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-accent);
+            border-radius: 6px;
+            padding: 16px 18px;
+            margin-bottom: 14px;
+        }
+        .soc-card-alert {
+            background-color: var(--card-alert-bg);
+            border: 1px solid var(--border-alert);
+            border-radius: 6px;
+            padding: 16px 18px;
+            margin-bottom: 14px;
+        }
+        .soc-card-success {
+            background-color: var(--card-success-bg);
+            border: 1px solid var(--border-success);
+            border-radius: 6px;
+            padding: 16px 18px;
+            margin-bottom: 14px;
+        }
+
+        /* Status & Defense Badges */
+        .status-badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+        .status-badge-accept {
+            background-color: var(--badge-accept-bg);
+            color: var(--badge-accept-text);
+            border: 1px solid var(--badge-accept-border);
+        }
+        .status-badge-reject {
+            background-color: var(--badge-reject-bg);
+            color: var(--badge-reject-text);
+            border: 1px solid var(--badge-reject-border);
+        }
+        .status-badge-info {
+            background-color: var(--badge-info-bg);
+            color: var(--badge-info-text);
+            border: 1px solid var(--badge-info-border);
+        }
+        .status-badge-warn {
+            background-color: var(--badge-warn-bg);
+            color: var(--badge-warn-text);
+            border: 1px solid var(--badge-warn-border);
+        }
+
+        /* Technical Data Display */
+        .mono-data {
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 0.85rem;
+            letter-spacing: 0.3px;
+        }
+
+        /* Metric Formatting */
+        div[data-testid="stMetricValue"] {
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-weight: 700;
+            font-size: 1.6rem;
+            color: var(--text-bright);
+        }
+        div[data-testid="stMetricLabel"] {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+        }
+
+        /* Process Pipeline Step Connector */
+        .pipeline-step {
+            border-left: 3px solid var(--border-accent);
+            padding-left: 14px;
+            margin-bottom: 12px;
+        }
+        .pipeline-step-failed {
+            border-left: 3px solid var(--border-alert);
+            padding-left: 14px;
+            margin-bottom: 12px;
+        }
+    </style>
+    """
+    st.markdown(css + shared_css, unsafe_allow_html=True)
+
+apply_console_styling(st.session_state.ui_theme)
+
+
+# ---------------------------------------------------------------------------
+# Cryptographic Session Initialization & Persistence
 # ---------------------------------------------------------------------------
 def init_session(force_reset: bool = False):
-    """Safely initialize or reset the cryptographic session state."""
+    """Safely initialize or reset cryptographic session state while preserving UI theme and logs."""
     if force_reset or "protocol_state" not in st.session_state:
+        existing_history = []
+        if "protocol_state" in st.session_state and st.session_state.protocol_state is not None:
+            existing_history = getattr(st.session_state.protocol_state, "history", [])
+
         st.session_state.protocol_state = initialize_protocol_session(
             n_positions=32,
             fingerprint_qubits=8,
@@ -175,43 +263,60 @@ def init_session(force_reset: bool = False):
             c1_threshold=0.05,
             c2_threshold=0.20,
         )
+        if existing_history:
+            st.session_state.protocol_state.history = existing_history
+
         st.session_state.last_packet = None
         st.session_state.last_bob_result = None
         st.session_state.last_charlie_result = None
         st.session_state.last_attack_result = None
-        st.session_state.demo_honest_result = None
-        st.session_state.demo_adversarial_result = None
-        st.session_state.custom_payload = "AUTHORIZE $1,000,000,000 WIRE TRANSFER TO ACCOUNT 9482"
-        st.session_state.active_attack = AttackType.NO_ATTACK
+        if "custom_payload" not in st.session_state:
+            st.session_state.custom_payload = "AUTHORIZE $1,000,000,000 WIRE SETTLEMENT TO AUDITED ESCROW 9482"
+        st.session_state.staged_demo_result = None
 
 init_session(force_reset=False)
 state: ProtocolState = st.session_state.protocol_state
 
 
 # ---------------------------------------------------------------------------
-# Sidebar: Session Controls & Resource Meters
+# Sidebar: Console Controls, Theme Settings & Resource Accounting
 # ---------------------------------------------------------------------------
 with st.sidebar:
-    st.markdown("### ⚙️ Protocol Parameters")
+    st.markdown("### CONSOLE CONTROLS")
+
+    # Theme Toggle (Persists across reruns, does NOT touch crypto state)
+    selected_theme = st.radio(
+        "DISPLAY THEME",
+        options=["DARK MODE", "LIGHT MODE"],
+        index=0 if st.session_state.ui_theme == "DARK" else 1,
+        help="Toggle between Dark and Light console interfaces without affecting cryptographic state.",
+    )
+    new_theme = "DARK" if "DARK" in selected_theme else "LIGHT"
+    if new_theme != st.session_state.ui_theme:
+        st.session_state.ui_theme = new_theme
+        st.rerun()
+
+    st.markdown("---")
+    st.markdown("### SESSION RECOVERY")
+    if st.button("RESET CRYPTOGRAPHIC SESSION", use_container_width=True, help="Wipe all keys and generate fresh 3-party session"):
+        init_session(force_reset=True)
+        st.rerun()
+
+    st.markdown("---")
+    st.markdown("### PROTOCOL PARAMETERS")
     st.markdown(
         """
-        * **Architecture**: Gottesman–Chuang QDS
-        * **Positions ($M$)**: `32`
-        * **Fingerprint Qubits ($n$)**: `8` ($N=256$)
-        * **Key Length ($L$)**: `128` bits
-        * **Copy Budget ($T$)**: `4` per position
+        * **Architecture**: Gottesman-Chuang QDS
+        * **Positions (M)**: `32`
+        * **Fingerprint Qubits (n)**: `8` (Hilbert dim `256`)
+        * **Private Key Length (L)**: `128` bits
+        * **Copy Budget (T)**: `4` per position
         * **Thresholds**: $c_1 = 0.05$, $c_2 = 0.20$
         """
     )
 
     st.markdown("---")
-    st.markdown("### 🔄 Session Management")
-    if st.button("🔄 Reset Cryptographic Session", use_container_width=True, help="Wipe all keys and start a clean session"):
-        init_session(force_reset=True)
-        st.rerun()
-
-    st.markdown("---")
-    st.markdown("### 📊 Quantum Public-Key Accounting")
+    st.markdown("### PUBLIC-KEY RESOURCE LEDGER")
     budget_stats = get_copy_budget_metrics(state.alice.key_pair, [state.bob.key_register, state.charlie_register])
     active_copies = budget_stats["active_in_circulation"]
     consumed_copies = budget_stats["consumed_copies"]
@@ -219,50 +324,52 @@ with st.sidebar:
     remaining_ratio = active_copies / total_slots if total_slots > 0 else 0.0
 
     st.metric("Copies in Circulation", f"{active_copies} / {total_slots}")
-    st.metric("Consumed by SWAP Tests", f"{consumed_copies} copies")
+    st.metric("SWAP-Consumed Copies", f"{consumed_copies}")
     st.progress(remaining_ratio, text=f"Active Budget: {remaining_ratio*100:.1f}%")
 
     st.markdown("---")
-    st.markdown("### 📐 Holevo Information Gap")
+    st.markdown("### HOLEVO ACCESSIBILITY BOUND")
     st.markdown(
         """
-        * Max Accessible Information: $T \\cdot n = 32$ bits
+        * Max Accessible Info: $T \\cdot n = 32$ bits
         * Private Secret Length: $L = 128$ bits
-        * **Entropy Margin**: $\\Delta H = 96$ bits
+        * **Entropy Secrecy Margin**: $\\Delta H = 96$ bits
         """
     )
 
     st.markdown("---")
-    developer_mode = st.toggle("🛠️ Developer / Debug Mode", value=False)
+    developer_mode = st.toggle("DIAGNOSTICS / DEBUG MODE", value=False)
 
 
 # ---------------------------------------------------------------------------
-# Top Header Banner: Architecture Metaphor & Status
+# Top Header Banner: Security Operations Console Overview
 # ---------------------------------------------------------------------------
-col_title, col_status = st.columns([2.5, 1.5])
+col_title, col_status = st.columns([2.6, 1.4])
 with col_title:
-    st.title("🛡️ QUATINIT: Quantum Digital Signature System")
-    st.caption("Asymmetric Gottesman–Chuang QDS Architecture with Teleportation Transport, Destructive Controlled-SWAP Verification, and Multi-Layer Threat Detection")
+    st.markdown("## QUATINIT — QUANTUM DIGITAL SIGNATURE CONSOLE")
+    st.caption("Asymmetric Gottesman-Chuang QDS with Teleportation Transport Adaptation, Controlled-SWAP Verification, and Multi-Layer Threat Detection")
 
 with col_status:
-    session_id_short = state.session.session_id[:8] if state.session else "INACTIVE"
+    session_id_short = state.session.session_id[:8] if state.session else "UNINITIALIZED"
     seq_num = state.session.current_sequence_number if state.session else 0
 
     st.markdown(
         f"""
-        <div class="cyber-card" style="margin-top: 10px; padding: 10px 14px;">
-            <div style="font-size: 0.8rem; color: #94a3b8;">ACTIVE CRYPTOGRAPHIC SESSION</div>
-            <div style="font-size: 1.1rem; font-weight: 700; color: #38bdf8; font-family: monospace;">ID: {session_id_short}••• | SEQ: {seq_num}</div>
-            <div style="margin-top: 4px;">
-                <span class="badge-info">Bell Monitor: ACTIVE</span>
-                <span class="badge-accept">ML-DSA-65: BOUND</span>
+        <div class="soc-card" style="padding: 10px 14px; margin-top: 6px;">
+            <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">Active Cryptographic Context</div>
+            <div class="mono-data" style="font-weight: 700; color: var(--text-bright); font-size: 0.95rem;">
+                SESSION: {session_id_short}... | SEQ: {seq_num}
+            </div>
+            <div style="margin-top: 6px;">
+                <span class="status-badge status-badge-info">BELL MONITOR: ACTIVE</span>
+                <span class="status-badge status-badge-accept">ML-DSA-65: BOUND</span>
             </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-# Visual Channel Status Banner
+# Visual Channel Status Indicator
 has_attack = (
     state.last_result is not None
     and state.last_result.attack_type != AttackType.NO_ATTACK
@@ -273,12 +380,12 @@ if has_attack:
     attack_name = state.last_result.attack_type.value
     st.markdown(
         f"""
-        <div class="eve-card" style="text-align: center;">
-            <span style="font-size: 1.1rem; font-weight: 700; color: #f87171;">⚠️ ADVERSARIAL INTERCEPTION DETECTED</span>
-            <div style="margin-top: 6px; font-family: monospace; font-size: 0.95rem;">
-                ALICE ────────► <span style="background: #ef4444; color: #fff; padding: 2px 8px; border-radius: 4px; font-weight: bold;">EVE ({attack_name})</span> ────────► BOB
+        <div class="soc-card-alert" style="text-align: center;">
+            <span class="status-badge status-badge-reject">CHANNEL STATUS: ADVERSARIAL INTERCEPTION DETECTED</span>
+            <div class="mono-data" style="margin-top: 6px; font-weight: 700;">
+                ALICE [SIGNER] ------------&gt; EVE [{attack_name}] ------------&gt; BOB [VERIFIER]
             </div>
-            <div style="margin-top: 6px; font-size: 0.85rem; color: #fca5a5;">
+            <div style="margin-top: 6px; font-size: 0.85rem; color: var(--text-muted);">
                 Rejection Code: <strong>{state.last_result.rejection_code}</strong> | Detection Layer: <strong>{state.last_result.detection_layer}</strong>
             </div>
         </div>
@@ -288,10 +395,10 @@ if has_attack:
 else:
     st.markdown(
         """
-        <div class="clean-card" style="text-align: center;">
-            <span style="font-size: 1.05rem; font-weight: 700; color: #34d399;">✓ QUANTUM & CLASSICAL CHANNELS SECURE</span>
-            <div style="margin-top: 4px; font-family: monospace; font-size: 0.95rem;">
-                ALICE (Signer) ═══════► QUANTUM CHANNEL (Teleportation) ═══════► BOB (Primary Verifier) ──► CHARLIE (Transfer)
+        <div class="soc-card-success" style="text-align: center;">
+            <span class="status-badge status-badge-accept">CHANNEL STATUS: SECURE / UNCOMPROMISED</span>
+            <div class="mono-data" style="margin-top: 6px; font-weight: 700;">
+                ALICE [SIGNER] ===========&gt; QUANTUM CHANNEL [TELEPORTATION TRANSPORT] ===========&gt; BOB [VERIFIER] -----&gt; CHARLIE [ARBITER]
             </div>
         </div>
         """,
@@ -300,15 +407,15 @@ else:
 
 
 # ---------------------------------------------------------------------------
-# Navigation Tabs
+# Navigation Tabs (Zero Emojis, Technical Headers)
 # ---------------------------------------------------------------------------
 tabs = st.tabs([
-    "🏛️ Overview & Architecture",
-    "🔑 Key Generation & Budgets",
-    "✍️ Sign & Verify Lifecycle",
-    "🌌 Quantum Channel & Teleportation",
-    "🔬 Threat Lab & Attack Matrix",
-    "🏆 One-Click Competition Demo",
+    "OVERVIEW & ARCHITECTURE",
+    "KEY GENERATION & COPY BUDGETS",
+    "SIGN & VERIFY LIFECYCLE",
+    "E91 BELL-CORRELATION MONITORING",
+    "ATTACK MATRIX & THREAT LAB",
+    "ONE-CLICK DEMONSTRATION",
 ])
 
 
@@ -316,20 +423,20 @@ tabs = st.tabs([
 # TAB 1: OVERVIEW & ARCHITECTURE
 # ===========================================================================
 with tabs[0]:
-    st.subheader("System Architecture & Design Principles")
+    st.subheader("System Architecture & Operational Topology")
 
     col_a, col_b, col_c = st.columns(3)
     with col_a:
         st.markdown(
             """
-            <div class="cyber-card">
-                <h4 style="color: #38bdf8; margin-top: 0;">1. Key Distribution</h4>
-                <p style="font-size: 0.9rem; color: #cbd5e1;">
-                    Alice generates classical secret keys $(k_0, k_1)$ and prepares phase-encoded quantum fingerprint states
-                    $|f_k\rangle = \\frac{1}{\\sqrt{N}}\\sum_j (-1)^{E(k)_j} |j\rangle$.
-                    Copies are distributed to Bob and Charlie over teleportation-assisted quantum channels.
+            <div class="soc-card">
+                <h4 style="color: var(--text-bright); margin-top: 0;">01. KEY DISTRIBUTION</h4>
+                <p style="font-size: 0.85rem; color: var(--text-muted);">
+                    Alice generates classical secret key pairs (k_0, k_1) and prepares phase-encoded quantum fingerprint states
+                    |f_k&gt; = (1 / &radic;N) &sum;_j (-1)^{E(k)_j} |j&gt;.
+                    Copies are distributed to Bob and Charlie over teleportation-assisted transport channels.
                 </p>
-                <span class="badge-info">Finite Copy Budget (T=4)</span>
+                <span class="status-badge status-badge-info">FINITE COPY BUDGET: T=4</span>
             </div>
             """,
             unsafe_allow_html=True,
@@ -338,14 +445,14 @@ with tabs[0]:
     with col_b:
         st.markdown(
             """
-            <div class="cyber-card">
-                <h4 style="color: #38bdf8; margin-top: 0;">2. Signing & Transport</h4>
-                <p style="font-size: 0.9rem; color: #cbd5e1;">
-                    Alice computes the session-bound message digest $H = \\text{SHA-256}(m \\parallel \\text{id} \\parallel c \\parallel s)$
-                    and reveals the matching classical key $k_{m_i}$ for each position.
-                    The transcript is bound using an auxiliary <strong>ML-DSA-65</strong> post-quantum signature.
+            <div class="soc-card">
+                <h4 style="color: var(--text-bright); margin-top: 0;">02. SIGNING & TRANSPORT</h4>
+                <p style="font-size: 0.85rem; color: var(--text-muted);">
+                    Alice computes session-salted message digest H = SHA-256(m || sess || chal || seq)
+                    and reveals the matching classical key k_{m_i} per position.
+                    The control-plane transcript is authenticated using auxiliary <strong>NIST ML-DSA-65</strong>.
                 </p>
-                <span class="badge-info">Classical Non-Repudiation</span>
+                <span class="status-badge status-badge-info">HYBRID POST-QUANTUM CONTROL</span>
             </div>
             """,
             unsafe_allow_html=True,
@@ -354,42 +461,42 @@ with tabs[0]:
     with col_c:
         st.markdown(
             """
-            <div class="cyber-card">
-                <h4 style="color: #38bdf8; margin-top: 0;">3. Destructive Verification</h4>
-                <p style="font-size: 0.9rem; color: #cbd5e1;">
-                    Bob regenerates the expected quantum fingerprint from Alice's revealed classical key and runs a
-                    destructive <strong>Controlled-SWAP test</strong> against his stored public key copy.
-                    A statistical decision $(c_1, c_2)$ separates honest signatures from forged states.
+            <div class="soc-card">
+                <h4 style="color: var(--text-bright); margin-top: 0;">03. DESTRUCTIVE VERIFICATION</h4>
+                <p style="font-size: 0.85rem; color: var(--text-muted);">
+                    Bob regenerates the expected quantum fingerprint from Alice's revealed key and executes a
+                    destructive <strong>Controlled-SWAP test</strong> against his registered public key copy.
+                    A calibrated statistical threshold test (c1, c2) isolates forged states.
                 </p>
-                <span class="badge-info">SWAP Test Mismatch Rate</span>
+                <span class="status-badge status-badge-info">CONTROLLED-SWAP TEST OVERLAP</span>
             </div>
             """,
             unsafe_allow_html=True,
         )
 
-    # Core Principles & Scientific Honesty Statement
-    st.markdown("### 📋 Protocol Guarantees & Threat Boundaries")
-    col_p1, col_p2 = st.columns(2)
-    with col_p1:
+    # Core Principles & Boundary Analysis
+    st.markdown("### Cryptographic Guarantees & Threat Boundaries")
+    col_g1, col_g2 = st.columns(2)
+    with col_g1:
         st.markdown(
             """
-            * **Asymmetric Security**: Bob can verify Alice's signature using quantum public keys, but cannot forge a new signature for Charlie.
-            * **Transferability & Dispute Resolution**: Verified signatures can be transferred to Charlie. Thresholds $c_1 < c_2$ guarantee that Bob cannot accept a signature that Charlie rejects.
+            * **Asymmetric Unforgeability**: Verifiers hold quantum public keys that permit verification but are mathematically insufficient to reconstruct Alice's private key.
+            * **Transferability & Dispute Resolution**: Verified signatures can be forwarded to Charlie. Thresholds $c_1 < c_2$ mathematically guarantee that Bob cannot accept a signature that Charlie rejects.
             * **Logical Finite-Copy Accounting**: Each verification destructively consumes a quantum copy. Software enforces strict copy accounting; no physical cloning protection is fabricated.
             """
         )
-    with col_p2:
+    with col_g2:
         st.markdown(
             """
-            * **Holevo Information Bound**: $T$ public copies provide at most $T \\cdot n = 32$ bits of accessible information, leaving an information deficit of $\\Delta H = 96$ bits against Alice's 128-bit secret.
-            * **E91-Inspired Bell Channel Monitoring**: Background entanglement pairs monitor the quantum distribution channel for eavesdropping and noise.
-            * **Hybrid Post-Quantum Defense**: ML-DSA-65 authenticates the classical control plane, preventing classical man-in-the-middle attacks.
+            * **Holevo Information Barrier**: $T$ public copies provide at most $T \\cdot n = 32$ bits of accessible mutual information, ensuring an entropy margin of $\\Delta H = 96$ bits against Alice's 128-bit private key.
+            * **E91-Inspired Bell Channel Monitoring**: Background entanglement pairs monitor the quantum distribution channel for eavesdropping disturbance.
+            * **Auxiliary Control-Plane Security**: NIST ML-DSA-65 authenticates classical transcripts, preventing classical man-in-the-middle tampering.
             """
         )
 
-    # Activity Log
+    # Session Activity Log
     if state.history:
-        st.markdown("### 📜 Session Verification History")
+        st.markdown("### Verification History Log")
         df_hist = pd.DataFrame(state.history).iloc[::-1]
         st.dataframe(
             df_hist,
@@ -404,47 +511,48 @@ with tabs[0]:
 
 
 # ===========================================================================
-# TAB 2: KEY GENERATION & BUDGETS
+# TAB 2: KEY GENERATION & COPY BUDGETS
 # ===========================================================================
 with tabs[1]:
-    st.subheader("Cryptographic Material & Public-Key Copy Budgets")
+    st.subheader("Key Material Generation & Quantum Copy Accounting")
 
     col_k1, col_k2 = st.columns(2)
 
     with col_k1:
         st.markdown(
             """
-            <div class="cyber-card">
-                <h4 style="color: #ef4444; margin-top: 0;">🔒 Alice: Private Signing Keys</h4>
-                <p style="font-size: 0.85rem; color: #94a3b8;">
+            <div class="soc-card">
+                <div style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase;">Signer Private Secret Material</div>
+                <h4 style="color: var(--border-alert); margin: 4px 0 8px 0;">ALICE: PRIVATE SIGNING KEYS</h4>
+                <p style="font-size: 0.85rem; color: var(--text-muted); margin: 0;">
                     CLASSIFICATION: <strong>CONFIDENTIAL / PRIVATE</strong><br>
-                    Two 128-bit private keys $(k_0, k_1)$ per position. Never exposed over any channel until signed.
+                    Two 128-bit private keys (k_0, k_1) per signature position. Maintained securely in memory and never transmitted until signing.
                 </p>
             </div>
             """,
             unsafe_allow_html=True,
         )
 
-        # Display masked key sample
         key_sample_data = []
         for pk in state.alice.key_pair.private_keys[: min(8, state.n_positions)]:
             key_sample_data.append({
-                "Position": f"Bit {pk.position:02d}",
+                "Position Index": f"Bit {pk.position:02d}",
                 "Private Key k_0": format_masked_key(pk.k0),
                 "Private Key k_1": format_masked_key(pk.k1),
-                "Bit Length": f"{state.alice.key_pair.private_key_length} bits",
+                "Length": f"{state.alice.key_pair.private_key_length} bits",
             })
         st.dataframe(pd.DataFrame(key_sample_data), use_container_width=True, hide_index=True)
-        st.caption("Displaying first 8 of 32 key pairs. Private bytes are masked (••••) to prevent memory exposure.")
+        st.caption("Displaying first 8 of 32 key pairs. Private bytes are masked to safeguard private secrets.")
 
     with col_k2:
         st.markdown(
             """
-            <div class="cyber-card">
-                <h4 style="color: #38bdf8; margin-top: 0;">🌐 Bob & Charlie: Quantum Public Keys</h4>
-                <p style="font-size: 0.85rem; color: #94a3b8;">
+            <div class="soc-card">
+                <div style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase;">Verifier Public Verification States</div>
+                <h4 style="color: var(--text-bright); margin: 4px 0 8px 0;">BOB & CHARLIE: QUANTUM PUBLIC MATERIAL</h4>
+                <p style="font-size: 0.85rem; color: var(--text-muted); margin: 0;">
                     CLASSIFICATION: <strong>QUANTUM PUBLIC / DISTRIBUTED</strong><br>
-                    Phase-encoded fingerprint states $|f_k\\rangle \\in \\mathcal{H}_{256}$ distributed via teleportation.
+                    Phase-encoded fingerprint states in Hilbert dimension 256 (n=8 qubits) distributed via teleportation transport.
                 </p>
             </div>
             """,
@@ -452,28 +560,28 @@ with tabs[1]:
         )
 
         pub_stats = []
-        for reg_name, reg in [("Bob (Primary)", state.bob.key_register), ("Charlie (Transfer)", state.charlie_register)]:
-            available = sum(1 for c in reg.copies.values() if c.status.name == "AVAILABLE")
+        for reg_name, reg in [("Bob (Primary Verifier)", state.bob.key_register), ("Charlie (Arbiter / Transfer)", state.charlie_register)]:
+            avail = sum(1 for c in reg.copies.values() if c.status.name == "AVAILABLE")
             consumed = sum(1 for c in reg.copies.values() if c.status.name == "CONSUMED")
             pub_stats.append({
-                "Verifier": reg_name,
-                "Positions Held": f"{state.n_positions} pairs",
-                "Qubit Dimension": f"{state.fingerprint_qubits} qubits (dim 256)",
-                "Available Copies": available,
+                "Verifier Entity": reg_name,
+                "Position Count": f"{state.n_positions} pairs",
+                "State Dimension": f"{state.fingerprint_qubits} qubits (dim 256)",
+                "Available Copies": avail,
                 "Consumed Copies": consumed,
             })
         st.dataframe(pd.DataFrame(pub_stats), use_container_width=True, hide_index=True)
 
         st.markdown(
             """
-            <div class="cyber-card" style="margin-top: 15px;">
-                <h5 style="color: #34d399; margin: 0 0 8px 0;">🔬 Public Key Fingerprint State Preparation</h5>
-                <code style="font-size: 0.85rem;">
-                |f_k⟩ = (1 / √256) · ∑_{j=0}^{255} (-1)^{E(k)_j} |j⟩
+            <div class="soc-card" style="margin-top: 14px;">
+                <h5 style="color: var(--text-bright); margin: 0 0 6px 0;">Phase-Encoded Fingerprint Construction</h5>
+                <code class="mono-data">
+                |f_k&gt; = (1 / &radic;256) &middot; &sum;_{j=0}^{255} (-1)^{E(k)_j} |j&gt;
                 </code>
-                <p style="font-size: 0.85rem; color: #cbd5e1; margin-top: 8px;">
-                    Generated via Hadamard transform followed by phase inversion encoding.
-                    Pairwise state overlap between different keys is bounded by |⟨f_k | f_k'⟩| ≤ 0.25 under BCH encoding.
+                <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 8px;">
+                    Generated via Hadamard transform followed by BCH phase inversion.
+                    Inner product overlap between distinct keys is bounded by |&lang;f_k | f_k'&rang;| &le; 0.25 under BCH codeword separation.
                 </p>
             </div>
             """,
@@ -485,45 +593,66 @@ with tabs[1]:
 # TAB 3: SIGN & VERIFY LIFECYCLE
 # ===========================================================================
 with tabs[2]:
-    st.subheader("Interactive Signing, Transmission & Verification")
+    st.subheader("Interactive Transaction Signing, Transport & Verification")
 
-    st.markdown("#### Step 1: Alice Signs a Message")
-    col_inp, col_presets = st.columns([2, 1])
+    def select_preset_scenario(payload_text: str):
+        st.session_state.custom_payload = payload_text
+        st.session_state.last_packet = None
+        st.session_state.last_bob_result = None
+        st.session_state.last_charlie_result = None
+        prepare_fresh_transaction_keys(st.session_state.protocol_state)
 
-    with col_inp:
-        message_input = st.text_input(
-            "Transaction Payload",
-            value=st.session_state.custom_payload,
-            help="Enter plaintext message to sign",
-        )
+    st.markdown("#### STEP 01: TRANSACTION PAYLOAD INPUT")
+    col_inp, col_presets = st.columns([2.2, 1])
+
     with col_presets:
         st.write("Preset Scenarios:")
         col_p1, col_p2 = st.columns(2)
-        if col_p1.button("💰 $1B Wire", use_container_width=True):
-            st.session_state.custom_payload = "AUTHORIZE $1,000,000,000 WIRE TRANSFER TO ACCOUNT 9482"
-            st.rerun()
-        if col_p2.button("⚡ Grid Command", use_container_width=True):
-            st.session_state.custom_payload = "GRID_OPERATIONAL_COMMAND_TRIP_FEEDER_SUBSTATION_04"
-            st.rerun()
+        col_p1.button(
+            "HIGH-VALUE WIRE",
+            on_click=select_preset_scenario,
+            args=("AUTHORIZE $1,000,000,000 WIRE SETTLEMENT TO AUDITED ESCROW 9482",),
+            use_container_width=True,
+            help="Load High-Value Interbank Wire Settlement scenario with fresh quantum keys.",
+        )
+        col_p2.button(
+            "GRID COMMAND",
+            on_click=select_preset_scenario,
+            args=("OPERATIONAL_DISPATCH_FEEDER_ISOLATION_SUBSTATION_04",),
+            use_container_width=True,
+            help="Load Critical Grid Feeder Isolation Command scenario with fresh quantum keys.",
+        )
 
-    if st.button("✍️ Alice: Generate Quantum Digital Signature", type="primary"):
+    with col_inp:
+        message_input = st.text_input(
+            "Plaintext Payload",
+            key="custom_payload",
+            help="Enter plaintext transaction payload to sign.",
+        )
+
+    if st.button("EXECUTE SIGNING ROUTINE (ALICE)", type="primary"):
+        if are_verifier_keys_consumed(state):
+            prepare_fresh_transaction_keys(state)
+
         packet, elapsed_ms = sign_message(state, message_input)
         st.session_state.last_packet = packet
-        st.success(f"Signature successfully generated in {elapsed_ms:.1f} ms!")
+        st.session_state.last_bob_result = None
+        st.session_state.last_charlie_result = None
+        st.success(f"Signature successfully generated in {elapsed_ms:.1f} ms.")
 
-    # Display active packet details if signed
+    # Display Active Packet Details
     if st.session_state.last_packet is not None:
         pkt = st.session_state.last_packet
         st.markdown("---")
-        st.markdown("#### Step 2: Inspection of Signed SecurePacket")
+        st.markdown("#### STEP 02: INSPECTION OF SIGNED SECUREPACKET")
 
         col_pkt1, col_pkt2, col_pkt3 = st.columns(3)
         with col_pkt1:
             st.markdown(
                 f"""
-                <div class="cyber-card">
-                    <div style="color: #94a3b8; font-size: 0.8rem;">MESSAGE HASH (SHA-256)</div>
-                    <div class="mono-text" style="color: #38bdf8; font-size: 0.9rem; word-break: break-all;">
+                <div class="soc-card">
+                    <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">Session-Bound Digest (SHA-256)</div>
+                    <div class="mono-data" style="color: var(--text-bright); word-break: break-all;">
                         {pkt.message_hash[:24]}...{pkt.message_hash[-16:]}
                     </div>
                 </div>
@@ -533,9 +662,9 @@ with tabs[2]:
         with col_pkt2:
             st.markdown(
                 f"""
-                <div class="cyber-card">
-                    <div style="color: #94a3b8; font-size: 0.8rem;">AUXILIARY ML-DSA-65 SIGNATURE</div>
-                    <div class="mono-text" style="color: #34d399; font-size: 0.9rem; word-break: break-all;">
+                <div class="soc-card">
+                    <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">Auxiliary ML-DSA-65 Signature</div>
+                    <div class="mono-data" style="color: var(--border-success); word-break: break-all;">
                         {pkt.ml_dsa_signature[:24]}...{pkt.ml_dsa_signature[-16:]}
                     </div>
                 </div>
@@ -545,9 +674,9 @@ with tabs[2]:
         with col_pkt3:
             st.markdown(
                 f"""
-                <div class="cyber-card">
-                    <div style="color: #94a3b8; font-size: 0.8rem;">QDS REVEALED KEYS</div>
-                    <div class="mono-text" style="color: #cbd5e1; font-size: 0.9rem;">
+                <div class="soc-card">
+                    <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">Revealed Key Count</div>
+                    <div class="mono-data" style="color: var(--text-main);">
                         {len(pkt.qds_signature.revealed_keys)} / {state.n_positions} keys revealed
                     </div>
                 </div>
@@ -556,12 +685,12 @@ with tabs[2]:
             )
 
         st.markdown("---")
-        st.markdown("#### Step 3: Verifications by Bob & Charlie")
+        st.markdown("#### STEP 03: VERIFICATIONS BY BOB & CHARLIE")
         col_v1, col_v2 = st.columns(2)
 
         with col_v1:
-            st.markdown("##### 🛡️ Bob: Primary Verification")
-            if st.button("🔬 Bob: Execute Controlled-SWAP Test", use_container_width=True):
+            st.markdown("##### PRIMARY VERIFICATION (BOB)")
+            if st.button("EXECUTE CONTROLLED-SWAP VERIFICATION (BOB)", use_container_width=True):
                 res_bob, elapsed_v = verify_packet(state, pkt)
                 st.session_state.last_bob_result = res_bob
 
@@ -570,9 +699,25 @@ with tabs[2]:
                 score = res.threat_score
 
                 if score.is_accepted:
-                    st.markdown('<div class="clean-card"><span class="badge-accept">🟢 ACCEPTED (1-ACC)</span><br><br>Signature verified successfully. Mismatch rate is within honest acceptance threshold.</div>', unsafe_allow_html=True)
+                    st.markdown(
+                        """
+                        <div class="soc-card-success">
+                            <span class="status-badge status-badge-accept">STATUS: ACCEPTED (1-ACC)</span><br><br>
+                            Signature verified successfully. Statistical mismatch rate is within acceptance threshold c1 (5.0%).
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
                 else:
-                    st.markdown(f'<div class="eve-card"><span class="badge-reject">🔴 REJECTED</span><br><br>Rejection: {res.rejection_code} (Layer: {res.detection_layer})</div>', unsafe_allow_html=True)
+                    st.markdown(
+                        f"""
+                        <div class="soc-card-alert">
+                            <span class="status-badge status-badge-reject">STATUS: REJECTED</span><br><br>
+                            Rejection Code: <strong>{res.rejection_code}</strong> | Detection Layer: <strong>{res.detection_layer}</strong>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
 
                 m1, m2, m3 = st.columns(3)
                 m1.metric("Mismatch Rate", f"{score.qds_mismatch_rate*100:.1f}%")
@@ -580,18 +725,34 @@ with tabs[2]:
                 m3.metric("Rejection Threshold (c2)", "20.0%")
 
         with col_v2:
-            st.markdown("##### 🤝 Charlie: Transfer Verification")
-            st.caption("Bob forwards the validated transaction to Charlie. Charlie independently verifies it against his quantum register.")
-            if st.button("📨 Transfer to Charlie & Verify", use_container_width=True):
+            st.markdown("##### TRANSFER VERIFICATION (CHARLIE)")
+            st.caption("Bob forwards the validated transaction to Charlie. Charlie independently verifies it using arbiter threshold c2.")
+            if st.button("TRANSFER TRANSACTION TO CHARLIE & VERIFY", use_container_width=True):
                 charlie_res, elapsed_c = transfer_to_charlie(state, pkt)
                 st.session_state.last_charlie_result = charlie_res
 
             if st.session_state.last_charlie_result is not None:
                 c_res = st.session_state.last_charlie_result
                 if c_res.outcome in (VerificationOutcome.ACC_1, VerificationOutcome.ACC_0):
-                    st.markdown(f'<div class="clean-card"><span class="badge-accept">🟢 TRANSFER ACCEPTED ({c_res.outcome.value})</span><br><br>Charlie successfully verified signature independently using threshold c2. Non-repudiation guaranteed!</div>', unsafe_allow_html=True)
+                    st.markdown(
+                        f"""
+                        <div class="soc-card-success">
+                            <span class="status-badge status-badge-accept">TRANSFER STATUS: ACCEPTED ({c_res.outcome.value})</span><br><br>
+                            Charlie independently verified signature against threshold c2. Non-repudiation guaranteed.
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
                 else:
-                    st.markdown(f'<div class="eve-card"><span class="badge-reject">🔴 TRANSFER REJECTED ({c_res.outcome.value})</span><br><br>Charlie rejected the transferred signature. Dispute initiated!</div>', unsafe_allow_html=True)
+                    st.markdown(
+                        f"""
+                        <div class="soc-card-alert">
+                            <span class="status-badge status-badge-reject">TRANSFER STATUS: REJECTED ({c_res.outcome.value})</span><br><br>
+                            Charlie rejected transferred signature. Dispute initiated.
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
 
                 c1, c2 = st.columns(2)
                 c1.metric("Charlie Mismatches", f"{c_res.n_failures} / {c_res.n_positions}")
@@ -599,35 +760,116 @@ with tabs[2]:
 
 
 # ===========================================================================
-# TAB 4: QUANTUM CHANNEL & TELEPORTATION
+# TAB 4: E91 BELL-CORRELATION MONITORING & TELEPORTATION
 # ===========================================================================
 with tabs[3]:
-    st.subheader("Quantum State Transport via Teleportation")
+    st.subheader("E91-Inspired Bell-Correlation Monitoring & Quantum Transport")
 
     st.markdown(
         """
-        <div class="cyber-card">
-            <p style="font-size: 0.9rem; color: #cbd5e1; margin: 0;">
-                <strong>Transport Adaptation</strong>: In Quatinit, teleportation is utilized as a quantum state transport adaptation
-                to deliver public fingerprint states across network distances without physical qubit transit.
-                <em>Security is derived from the Gottesman–Chuang QDS protocol and Controlled-SWAP verification, not the teleportation transport itself.</em>
+        <div class="soc-card">
+            <p style="font-size: 0.85rem; color: var(--text-muted); margin: 0;">
+                <strong>SCIENTIFIC SPECIFICATION</strong>: This component is an <em>E91-inspired monitoring mechanism rather than a complete E91 QKD implementation</em>.
+                It monitors quantum channel integrity by measuring entanglement correlation preservation across distributed Bell pairs.
+                Disturbance caused by eavesdropping (e.g. intercept-resend) disrupts these correlations, tripping the detection layer prior to signature verification.
             </p>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    st.markdown("#### Interactive Teleportation Experiment")
-    col_t_ctrl, col_t_res = st.columns([1.2, 1.8])
+    st.markdown("#### CONCEPTUAL FLOW: BELL-CORRELATION MONITORING")
+    st.markdown(
+        """
+        ```text
+        ENTANGLED PAIR PREPARATION ---> EPR DISTRIBUTION ---> MEASUREMENT BASES (X/Z) ---> CORRELATION ANALYSIS ---> BASELINE COMPARISON ---> INTEGRITY ASSESSMENT
+                    |                                                    |
+             Alice (|Phi+>)                                         Bob (|Phi+>)
+        ```
+        """
+    )
 
-    with col_t_ctrl:
-        st.markdown("##### Circuit Parameters")
-        input_state = st.selectbox("Input Quantum State", ["+", "-", "0", "1"], index=0)
-        channel_err = st.selectbox("Quantum Channel Noise", ["NONE", "X", "Z", "DEPOLARIZING"], index=0)
-        corrupt_crx = st.checkbox("Corrupt Classical Bit crx (X-Correction)", value=False)
-        corrupt_crz = st.checkbox("Corrupt Classical Bit crz (Z-Correction)", value=False)
+    # Interactive E91 Scan Panel
+    col_e_ctrl, col_e_metric = st.columns([1.2, 1.8])
 
-        if st.button("⚡ Simulate Teleportation Transport", use_container_width=True, type="primary"):
+    with col_e_ctrl:
+        st.markdown("##### Channel Scan Configuration")
+        e91_pairs = st.slider("Bell Pairs Sampled", min_value=50, max_value=250, value=100, step=25)
+        e91_attack_type = st.selectbox(
+            "Channel Disturbance Simulation",
+            options=["NONE", "INTERCEPT_RESEND"],
+            format_func=lambda s: "CLEAN CHANNEL (NO EAVESDROPPING)" if s == "NONE" else "EVE INTERCEPT-RESEND ATTACK",
+        )
+
+        if st.button("EXECUTE BELL CORRELATION SCAN", type="primary", use_container_width=True):
+            e_result = measure_e91_detailed(num_pairs=e91_pairs, attack_type=e91_attack_type)
+            st.session_state.last_e91_scan = e_result
+            st.session_state.e91_history.append({
+                "Timestamp": time.strftime("%H:%M:%S"),
+                "Pairs": e91_pairs,
+                "Attack": e91_attack_type,
+                "Error Rate": f"{e_result['error_rate']*100:.1f}%",
+                "Matches": e_result["matches"],
+                "Status": e_result["channel_status"],
+            })
+
+    with col_e_metric:
+        scan_data = getattr(st.session_state, "last_e91_scan", None)
+        if scan_data is None:
+            scan_data = measure_e91_detailed(num_pairs=100, attack_type="NONE")
+
+        st.markdown("##### Live Channel Telemetry")
+        m_e1, m_e2, m_e3, m_e4 = st.columns(4)
+        m_e1.metric("Error Rate", scan_data["error_rate_pct"])
+        m_e2.metric("Baseline Rate", "0.00%")
+        m_e3.metric("Threshold", scan_data["threshold_pct"])
+        m_e4.metric("Correlation Coeff", f"{scan_data['correlation_coeff']:.3f}")
+
+        status = scan_data["channel_status"]
+        if status == "NORMAL":
+            st.markdown('<div class="soc-card-success"><span class="status-badge status-badge-accept">CHANNEL STATUS: NORMAL</span><br><br>Entanglement correlations preserved. Channel error rate is below threshold (15.0%).</div>', unsafe_allow_html=True)
+        else:
+            st.markdown(f'<div class="soc-card-alert"><span class="status-badge status-badge-reject">CHANNEL STATUS: {status}</span><br><br>Entanglement correlation collapsed. Intercept-resend eavesdropping detected!</div>', unsafe_allow_html=True)
+
+    # Historical Monitoring Data
+    if st.session_state.e91_history:
+        st.markdown("##### Recent Correlation Scan History")
+        st.dataframe(pd.DataFrame(st.session_state.e91_history).iloc[::-1], use_container_width=True, hide_index=True)
+
+    with st.expander("HOW THIS WORKS — TECHNICAL EXPLANATION", expanded=False):
+        st.markdown(
+            """
+            1. **Entanglement Distribution**: Alice and Bob receive halves of an entangled Bell pair $|\\Phi^+\\rangle = \\frac{1}{\\sqrt{2}}(|00\\rangle + |11\\rangle)$.
+            2. **Random Basis Measurement**: Both parties measure in randomly chosen complementary bases (Pauli-Z or Pauli-X).
+            3. **Correlation Sifting**: When measurement bases match, legitimate entanglement dictates identical outcomes (0% error rate).
+            4. **Adversarial Disturbance**: If Eve intercepts and measures in an arbitrary basis, she collapses the superposition, introducing a theoretical **25.0% error rate** on matched bases.
+            5. **Threshold Assessment**: When the measured error rate exceeds the 15.0% threshold, the channel is declared compromised and QDS transport is aborted.
+            """
+        )
+
+    st.markdown("---")
+    st.markdown("#### QUANTUM STATE TRANSPORT ADAPTATION (TELEPORTATION)")
+    st.markdown(
+        """
+        <div class="soc-card">
+            <p style="font-size: 0.85rem; color: var(--text-muted); margin: 0;">
+                <em>Teleportation transports an unknown quantum state using entanglement and classical correction bits.
+                Security comes from the surrounding QDS protocol and verification mechanism, not the teleportation transport itself.</em>
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    col_t_in, col_t_out = st.columns([1.2, 1.8])
+    with col_t_in:
+        st.markdown("##### Transport Circuit Configuration")
+        input_state = st.selectbox("Input Quantum State", ["+", "-", "0", "1"], index=0, format_func=lambda s: f"State |{s}>")
+        channel_err = st.selectbox("Quantum Channel Noise Model", ["NONE", "X", "Z", "DEPOLARIZING"], index=0)
+        corrupt_crx = st.checkbox("Corrupt Classical Correction Bit crx", value=False)
+        corrupt_crz = st.checkbox("Corrupt Classical Correction Bit crz", value=False)
+
+        if st.button("EXECUTE TELEPORTATION TRANSPORT", use_container_width=True):
             t_res = run_teleportation_transport_demo(
                 input_state_char=input_state,
                 channel_error=channel_err,
@@ -636,311 +878,284 @@ with tabs[3]:
             )
             st.session_state.teleport_result = t_res
 
-    with col_t_res:
+    with col_t_out:
         t_data = getattr(st.session_state, "teleport_result", None)
         if t_data is None:
             t_data = run_teleportation_transport_demo()
 
-        st.markdown("##### Transport Execution Trace")
+        st.markdown("##### Transport Circuit Trace")
         col_m1, col_m2, col_m3 = st.columns(3)
         col_m1.metric("Input State", t_data["input_state"])
         col_m2.metric("State Fidelity", t_data["fidelity_pct"])
         col_m3.metric("Pauli Correction", t_data["pauli_correction"])
 
         if t_data["reconstructed_successfully"]:
-            st.success(f"✓ Quantum state successfully reconstructed at receiver with fidelity {t_data['fidelity_pct']}!")
+            st.markdown('<div class="soc-card-success"><span class="status-badge status-badge-accept">TRANSPORT STATUS: FIDELITY PRESERVED</span><br><br>State reconstructed at receiver with fidelity &gt; 95%.</div>', unsafe_allow_html=True)
         else:
-            st.error(f"❌ State fidelity degraded to {t_data['fidelity_pct']} due to channel noise or classical correction tampering!")
-
-        st.markdown(
-            f"""
-            <div class="cyber-card" style="margin-top: 10px;">
-                <h5 style="color: #38bdf8; margin: 0 0 6px 0;">Teleportation Lifecycle Stages</h5>
-                <ol style="font-size: 0.85rem; color: #cbd5e1; padding-left: 20px; margin: 0;">
-                    <li><strong>Bell Pair Generation</strong>: Entangled EPR pair |Φ+⟩ = (|00⟩ + |11⟩)/√2 distributed between Alice and Bob.</li>
-                    <li><strong>Bell-Basis Measurement</strong>: Alice performs CNOT + H on input state and her EPR half, measuring classical bits (crz, crx) = ({t_data['crz_bit']}, {t_data['crx_bit']}).</li>
-                    <li><strong>Classical Correction Transmission</strong>: Classical bits transmitted to Bob.</li>
-                    <li><strong>Unitary Correction</strong>: Bob conditionally applies Pauli operator <code>{t_data['pauli_correction']}</code> to recover input state.</li>
-                </ol>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    st.markdown("---")
-    st.markdown("#### E91-Inspired Bell Channel Monitoring")
-    col_e91_a, col_e91_b = st.columns([1, 2])
-    with col_e91_a:
-        st.metric("Bell Channel Error Rate", "2.1%", delta="-12.9% vs Threshold", delta_color="normal")
-        st.caption("Threshold: 15.0% error rate. Below threshold implies unperturbed entanglement.")
-    with col_e91_b:
-        st.markdown(
-            """
-            <div class="clean-card" style="padding: 12px 16px;">
-                <span class="badge-accept">✓ BELL CORRELATION SECURE</span>
-                <p style="font-size: 0.85rem; color: #cbd5e1; margin-top: 6px;">
-                    Simulated CHSH/Bell inequality testing continuously monitors EPR channels.
-                    Any eavesdropping attempt by Eve disrupts quantum correlations, tripping the E91 detector prior to signature transport.
-                </p>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+            st.markdown(f'<div class="soc-card-alert"><span class="status-badge status-badge-reject">TRANSPORT STATUS: FIDELITY DEGRADED ({t_data["fidelity_pct"]})</span><br><br>Channel noise or correction tampering corrupted state reconstruction.</div>', unsafe_allow_html=True)
 
 
 # ===========================================================================
-# TAB 5: THREAT LAB & ATTACK MATRIX
+# TAB 5: COMPLETE ATTACK MATRIX & THREAT LAB
 # ===========================================================================
 with tabs[4]:
-    st.subheader("Adversarial Attack Simulation & Defense Verification")
+    st.subheader("Comprehensive Threat Matrix & Defense Verification")
 
-    st.markdown(
-        """
-        <div class="cyber-card">
-            <p style="font-size: 0.9rem; color: #cbd5e1; margin: 0;">
-                Select from the <strong>18 backend attack scenarios</strong>.
-                Each attack injects real tampering into the cryptographic pipeline and measures multi-layer defense response.
-            </p>
-        </div>
-        """,
-        unsafe_allow_html=True,
+    # Threat Summary Counters
+    n_total = len(ATTACK_CATALOGUE)
+    n_detected = sum(1 for a in ATTACK_CATALOGUE if a["defense_status"] == "DETECTED")
+    n_prevented = sum(1 for a in ATTACK_CATALOGUE if a["defense_status"] == "PREVENTED")
+    n_mitigated = sum(1 for a in ATTACK_CATALOGUE if a["defense_status"] == "MITIGATED")
+    n_out_of_scope = sum(1 for a in ATTACK_CATALOGUE if a["defense_status"] in ("OUT_OF_SCOPE", "NOT_DETECTABLE"))
+
+    col_sm1, col_sm2, col_sm3, col_sm4, col_sm5 = st.columns(5)
+    col_sm1.metric("Total Threat Vectors", f"{n_total}")
+    col_sm2.metric("Detected by System", f"{n_detected}")
+    col_sm3.metric("Structurally Prevented", f"{n_prevented}")
+    col_sm4.metric("Mitigated / Tolerated", f"{n_mitigated}")
+    col_sm5.metric("Out of Scope / Non-Tamper", f"{n_out_of_scope}")
+
+    st.markdown("---")
+    st.markdown("#### ATTACK MATRIX DIRECTORY")
+
+    # Filter Controls
+    col_f1, col_f2, col_f3 = st.columns([1.5, 1.5, 2])
+    categories = ["ALL CATEGORIES"] + sorted(list(set(a["category"] for a in ATTACK_CATALOGUE)))
+    statuses = ["ALL STATUSES", "DETECTED", "PREVENTED", "MITIGATED"]
+
+    with col_f1:
+        cat_filter = st.selectbox("Filter by Category", categories)
+    with col_f2:
+        status_filter = st.selectbox("Filter by Defense Status", statuses)
+    with col_f3:
+        search_query = st.text_input("Search Threat Vectors", placeholder="Search by name, component, or detection layer...")
+
+    # Filtered List
+    filtered_attacks = ATTACK_CATALOGUE
+    if cat_filter != "ALL CATEGORIES":
+        filtered_attacks = [a for a in filtered_attacks if a["category"] == cat_filter]
+    if status_filter != "ALL STATUSES":
+        filtered_attacks = [a for a in filtered_attacks if a["defense_status"] == status_filter]
+    if search_query:
+        q = search_query.lower()
+        filtered_attacks = [
+            a for a in filtered_attacks
+            if q in a["name"].lower() or q in a["target_component"].lower() or q in a["detection_layer"].lower() or q in a["description"].lower()
+        ]
+
+    # Display Filtered Matrix Table
+    matrix_rows = []
+    for a in filtered_attacks:
+        matrix_rows.append({
+            "ID": a["attack_id"],
+            "Threat Vector": a["name"],
+            "Category": a["category"],
+            "Target Component": a["target_component"],
+            "Defense Status": a["defense_status"],
+            "Detection Layer": a["detection_layer"],
+            "Typical Mismatch": a["typical_mismatch"],
+            "Threat Level": a["threat_level"],
+        })
+    st.dataframe(pd.DataFrame(matrix_rows), use_container_width=True, hide_index=True)
+
+    # Attack Detail & Execution Section
+    st.markdown("---")
+    st.markdown("#### ATTACK DETAIL INSPECTION & LIVE EXECUTION")
+
+    selected_atk_name = st.selectbox(
+        "Select Attack Vector for Technical Inspection",
+        options=[a["name"] for a in ATTACK_CATALOGUE],
     )
+    atk_entry = next(a for a in ATTACK_CATALOGUE if a["name"] == selected_atk_name)
 
-    attack_categories = {
-        "Classical Control-Plane Attacks": [
-            AttackType.MESSAGE_TAMPERING,
-            AttackType.HASH_TAMPERING,
-            AttackType.SIGNATURE_TAMPERING,
-            AttackType.SEQUENCE_TAMPERING,
-            AttackType.COMPROMISED_SESSION_CONTEXT,
-        ],
-        "Forgery & Replay Attacks": [
-            AttackType.FORGERY_ATTEMPT,
-            AttackType.IMPERSONATION,
-            AttackType.REPLAY,
-            AttackType.PROOF_SUBSTITUTION,
-            AttackType.KEY_SUBSTITUTION,
-            AttackType.CROSS_SESSION_REUSE,
-        ],
-        "Quantum Channel Attacks": [
-            AttackType.INTERCEPT_RESEND,
-            AttackType.E91_CHANNEL_DISTURBANCE,
-            AttackType.QUANTUM_X,
-            AttackType.QUANTUM_Z,
-            AttackType.QUANTUM_Y,
-            AttackType.QUANTUM_DEPOLARIZING,
-        ],
-        "Protocol Constraint & Resource Attacks": [
-            AttackType.COPY_EXHAUSTION,
-            AttackType.UNAUTHORIZED_VERIFICATION,
-            AttackType.REPUDIATION_ATTEMPT,
-            AttackType.TRANSFERABILITY_ATTACK,
-            AttackType.HOLEVO_EXHAUSTION,
-        ],
-    }
+    col_det1, col_det2 = st.columns([1.8, 1.2])
 
-    col_atk_sel, col_atk_exec = st.columns([1.5, 1])
-
-    with col_atk_sel:
-        cat_chosen = st.selectbox("Attack Category", list(attack_categories.keys()))
-        attack_options = attack_categories[cat_chosen]
-        selected_attack_type = st.selectbox(
-            "Specific Attack Vector",
-            attack_options,
-            format_func=lambda a: a.value,
+    with col_det1:
+        st.markdown(
+            f"""
+            <div class="soc-card">
+                <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">Threat Specification — {atk_entry['attack_id']}</div>
+                <h4 style="color: var(--text-bright); margin: 4px 0 10px 0;">{atk_entry['name']}</h4>
+                <p style="font-size: 0.9rem; color: var(--text-main);"><strong>Description</strong>: {atk_entry['description']}</p>
+                <p style="font-size: 0.85rem; color: var(--text-muted);"><strong>Target Component</strong>: {atk_entry['target_component']}</p>
+                <p style="font-size: 0.85rem; color: var(--text-muted);"><strong>Detection Method</strong>: {atk_entry['detection_method']}</p>
+                <p style="font-size: 0.85rem; color: var(--text-muted);"><strong>System Response</strong>: {atk_entry['system_response']}</p>
+                <p style="font-size: 0.85rem; color: var(--text-muted);"><strong>Scientific Basis</strong>: {atk_entry['why_it_fails']}</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
 
-    with col_atk_exec:
-        st.write("Target Payload:")
-        target_payload = st.text_input("Attack Target Message", value="CONFIDENTIAL_SETTLEMENT_ORDER_$500M")
-        if st.button("⚡ Launch Selected Attack", type="primary", use_container_width=True):
-            pkt, atk_res, elapsed_atk = execute_attack_scenario(state, selected_attack_type, target_payload)
+    with col_det2:
+        st.markdown(
+            f"""
+            <div class="soc-card">
+                <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">Defense Parameters</div>
+                <div style="margin: 8px 0;">
+                    <span class="status-badge {'status-badge-accept' if atk_entry['defense_status'] == 'PREVENTED' else 'status-badge-reject'}">{atk_entry['defense_status']}</span>
+                    <span class="status-badge status-badge-info">{atk_entry['detection_layer']}</span>
+                </div>
+                <p style="font-size: 0.85rem; color: var(--text-muted); margin: 4px 0;">Expected Mismatch: <strong>{atk_entry['typical_mismatch']}</strong></p>
+                <p style="font-size: 0.85rem; color: var(--text-muted); margin: 4px 0;">Threat Rating: <strong>{atk_entry['threat_level']}</strong></p>
+                <p style="font-size: 0.85rem; color: var(--text-muted); margin: 4px 0;">Validation Reference: <code>{atk_entry['test_reference']}</code></p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        target_payload = st.text_input("Payload for Attack Execution", value="TRANSACTION_SETTLEMENT_ORD_9824")
+        if st.button("EXECUTE ATTACK IN LIVE PIPELINE", type="primary", use_container_width=True):
+            pkt, atk_res, elapsed_atk = execute_attack_scenario(state, atk_entry["attack_type"], target_payload)
             st.session_state.last_attack_result = atk_res
 
-    # Display Attack Results
+    # Live Attack Result Display
     if st.session_state.last_attack_result is not None:
         res = st.session_state.last_attack_result
         score = res.threat_score
         threat_lvl = getattr(score, "threat_level", "HIGH" if score and not score.is_accepted else "LOW")
         threat_val = getattr(score, "overall_threat_score", 0.85 if score and not score.is_accepted else 0.05)
-        st.markdown("---")
-        st.markdown("#### Threat Detection & Defense Dashboard")
 
-        col_d1, col_d2, col_d3, col_d4 = st.columns(4)
-
-        with col_d1:
-            st.markdown(
-                f"""
-                <div class="eve-card">
-                    <div style="font-size: 0.8rem; color: #fca5a5;">THREAT LEVEL</div>
-                    <div style="font-size: 1.5rem; font-weight: 700; color: #ef4444;">{threat_lvl}</div>
-                    <div style="font-size: 0.8rem; color: #f87171;">Score: {threat_val:.2f} / 1.0</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-        with col_d2:
-            st.markdown(
-                f"""
-                <div class="cyber-card">
-                    <div style="font-size: 0.8rem; color: #94a3b8;">DEFENSE STATUS</div>
-                    <div style="font-size: 1.4rem; font-weight: 700; color: #34d399;">{res.defense_status.value}</div>
-                    <div style="font-size: 0.8rem; color: #94a3b8;">Detected: {res.detected}</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-        with col_d3:
-            st.markdown(
-                f"""
-                <div class="cyber-card">
-                    <div style="font-size: 0.8rem; color: #94a3b8;">DETECTION LAYER</div>
-                    <div style="font-size: 1.1rem; font-weight: 700; color: #38bdf8; font-family: monospace;">{res.detection_layer}</div>
-                    <div style="font-size: 0.8rem; color: #94a3b8;">Code: {res.rejection_code}</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-        with col_d4:
-            st.markdown(
-                f"""
-                <div class="cyber-card">
-                    <div style="font-size: 0.8rem; color: #94a3b8;">MISMATCH RATE</div>
-                    <div style="font-size: 1.5rem; font-weight: 700; color: #fbbf24;">{score.qds_mismatch_rate*100:.1f}%</div>
-                    <div style="font-size: 0.8rem; color: #94a3b8;">Threshold c1: 5.0%</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-    # Attack Matrix Reference Table
-    st.markdown("---")
-    st.markdown("#### 📚 Protocol Attack Matrix Reference")
-    matrix_data = [
-        {"Attack Vector": "MESSAGE_TAMPERING", "Layer": "Classical Hash", "Defense": "DETECTED", "Mechanism": "SHA-256 Digest Mismatch"},
-        {"Attack Vector": "HASH_TAMPERING", "Layer": "Classical Hash", "Defense": "DETECTED", "Mechanism": "Session Challenge Binding"},
-        {"Attack Vector": "SIGNATURE_TAMPERING", "Layer": "ML-DSA-65", "Defense": "DETECTED", "Mechanism": "FIPS-204 Signature Invalidation"},
-        {"Attack Vector": "FORGERY_ATTEMPT", "Layer": "QDS SWAP Test", "Defense": "DETECTED", "Mechanism": "Destructive SWAP Test Mismatch (> 25%)"},
-        {"Attack Vector": "IMPERSONATION", "Layer": "QDS SWAP Test", "Defense": "DETECTED", "Mechanism": "Unknown Alice Secret Keys"},
-        {"Attack Vector": "REPLAY", "Layer": "Sequence & Copy Budget", "Defense": "PREVENTED", "Mechanism": "Stale Sequence & Destructive Copy Depletion"},
-        {"Attack Vector": "INTERCEPT_RESEND", "Layer": "E91 / SWAP Test", "Defense": "DETECTED", "Mechanism": "Bell Channel Disturbance (> 15%)"},
-        {"Attack Vector": "QUANTUM_DEPOLARIZING", "Layer": "QDS SWAP Test", "Defense": "DETECTED", "Mechanism": "Statevector Decoupling Mismatch"},
-        {"Attack Vector": "COPY_EXHAUSTION", "Layer": "Copy Budget Ledger", "Defense": "PREVENTED", "Mechanism": "Logical Resource Accounting (T=4)"},
-    ]
-    st.dataframe(pd.DataFrame(matrix_data), use_container_width=True, hide_index=True)
+        st.markdown("##### Threat Engine Live Evaluation")
+        col_res1, col_res2, col_res3, col_res4 = st.columns(4)
+        col_res1.metric("Threat Level", threat_lvl)
+        col_res2.metric("Threat Score", f"{threat_val:.2f} / 1.00")
+        col_res3.metric("Detection Layer", res.detection_layer)
+        col_res4.metric("Mismatch Rate", f"{getattr(score, 'qds_mismatch_rate', 0.0)*100:.1f}%")
 
 
 # ===========================================================================
-# TAB 6: ONE-CLICK COMPETITION DEMO
+# TAB 6: ONE-CLICK COMPETITION DEMONSTRATION
 # ===========================================================================
 with tabs[5]:
-    st.subheader("Competition Live Presentation Demo")
+    st.subheader("Automated End-to-End Demonstration Pipeline")
 
     st.markdown(
         """
-        <div class="cyber-card">
-            <p style="font-size: 0.95rem; color: #cbd5e1; margin: 0;">
-                Designed specifically for competition judges and live evaluation.
-                Execute the <strong>entire honest signature lifecycle</strong> or an <strong>adversarial interception scenario</strong>
-                with a single click, completely backed by real quantum simulation and measured latencies.
+        <div class="soc-card">
+            <p style="font-size: 0.85rem; color: var(--text-muted); margin: 0;">
+                Designed for live presentation and competition evaluation.
+                Executes the complete protocol flow across <strong>7 discrete stages</strong> with real quantum state simulation,
+                destructive SWAP test verification, and multi-layer threat scoring.
             </p>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    col_demo_a, col_demo_b = st.columns(2)
+    col_ctl_a, col_ctl_b = st.columns([1.2, 1.8])
 
-    with col_demo_a:
-        st.markdown("### 🟢 Flow 1: Honest Transaction")
-        st.caption("Demonstrates valid signing, teleportation transport, Bob acceptance (c1), and Charlie transferability (c2).")
-        if st.button("🚀 Run Honest Transaction Flow (One-Click)", type="primary", use_container_width=True):
-            with st.spinner("Executing end-to-end honest QDS pipeline..."):
-                demo_res = run_honest_demo_pipeline(n_positions=32)
-                st.session_state.demo_honest_result = demo_res
-
-        if st.session_state.demo_honest_result is not None:
-            d_res = st.session_state.demo_honest_result
-            st.markdown(
-                """
-                <div class="clean-card">
-                    <span class="badge-accept" style="font-size: 1rem;">✓ TRANSACTION COMPLETED & VERIFIED</span>
-                    <h4 style="color: #34d399; margin: 8px 0 4px 0;">All 4 Protocol Stages Passed</h4>
-                    <p style="font-size: 0.85rem; color: #cbd5e1; margin: 0;">
-                        Alice signed ➔ Quantum state transported ➔ Bob accepted (0.0% mismatch) ➔ Charlie verified transfer!
-                    </p>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-            # Stage timings breakdown
-            timings = d_res["timings_ms"]
-            t_df = pd.DataFrame([
-                {"Stage": "1. KeyGen & Distribution (Teleportation)", "Time (ms)": f"{timings['keygen']} ms"},
-                {"Stage": "2. Alice Signing & ML-DSA Binding", "Time (ms)": f"{timings['sign']} ms"},
-                {"Stage": "3. Bob SWAP Test Verification", "Time (ms)": f"{timings['bob_verify']} ms"},
-                {"Stage": "4. Charlie Transfer Verification", "Time (ms)": f"{timings['charlie_verify']} ms"},
-                {"Stage": "Total Pipeline Latency", "Time (ms)": f"{timings['total']} ms"},
-            ])
-            st.dataframe(t_df, use_container_width=True, hide_index=True)
-
-    with col_demo_b:
-        st.markdown("### 🔴 Flow 2: Adversarial Attack Scenario")
-        st.caption("Demonstrates Eve intercepting the channel, modifying data, and being immediately isolated by the multi-layer threat engine.")
-        preset_atk = st.selectbox(
-            "Select Adversarial Vector for Demo",
-            [
-                AttackType.FORGERY_ATTEMPT,
-                AttackType.MESSAGE_TAMPERING,
-                AttackType.REPLAY,
-                AttackType.INTERCEPT_RESEND,
-                AttackType.QUANTUM_DEPOLARIZING,
-            ],
-            format_func=lambda a: a.value,
+    with col_ctl_a:
+        st.markdown("##### Demonstration Mode")
+        demo_mode_sel = st.radio(
+            "Select Scenario Type",
+            options=["HONEST TRANSACTION FLOW", "ADVERSARIAL ATTACK FLOW"],
+            index=0,
         )
 
-        if st.button("⚡ Run Adversarial Attack Flow (One-Click)", use_container_width=True):
-            with st.spinner("Simulating attack & executing multi-layer defense..."):
-                adv_res = run_adversarial_demo_pipeline(preset_atk, n_positions=32)
-                st.session_state.demo_adversarial_result = adv_res
+        selected_adv_atk = None
+        if "ADVERSARIAL" in demo_mode_sel:
+            selected_adv_atk = st.selectbox(
+                "Select Adversarial Attack Vector",
+                options=[
+                    AttackType.FORGERY_ATTEMPT,
+                    AttackType.MESSAGE_TAMPERING,
+                    AttackType.INTERCEPT_RESEND,
+                    AttackType.REPLAY,
+                    AttackType.QUANTUM_DEPOLARIZING,
+                    AttackType.SIGNATURE_TAMPERING,
+                ],
+                format_func=lambda a: a.value,
+            )
 
-        if st.session_state.demo_adversarial_result is not None:
-            a_res = st.session_state.demo_adversarial_result
+        if st.button("RUN AUTOMATED DEMONSTRATION", type="primary", use_container_width=True):
+            mode_str = "HONEST" if "HONEST" in demo_mode_sel else "ADVERSARIAL"
+            with st.spinner("Executing 7-stage protocol pipeline..."):
+                demo_output = run_staged_demo_pipeline(
+                    mode=mode_str,
+                    attack_type=selected_adv_atk,
+                    n_positions=32,
+                    payload="AUTHORIZE $1,000,000,000 WIRE SETTLEMENT TO AUDITED ESCROW 9482",
+                )
+                st.session_state.staged_demo_result = demo_output
+
+    with col_ctl_b:
+        d_out = getattr(st.session_state, "staged_demo_result", None)
+        if d_out is not None:
+            if d_out["success"]:
+                st.markdown(
+                    f"""
+                    <div class="soc-card-success">
+                        <span class="status-badge status-badge-accept">TRANSACTION STATUS: ACCEPTED</span><br><br>
+                        All 7 protocol lifecycle stages executed and validated in <strong>{d_out['total_elapsed_ms']} ms</strong>.<br>
+                        Bob verified Controlled-SWAP test (0.0% mismatch) and Charlie accepted dispute transfer.
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.markdown(
+                    f"""
+                    <div class="soc-card-alert">
+                        <span class="status-badge status-badge-reject">TRANSACTION STATUS: REJECTED</span><br><br>
+                        Adversarial intervention detected and isolated in <strong>{d_out['total_elapsed_ms']} ms</strong>.<br>
+                        Threat engine flagged attack. Multi-layer defenses prevented fraudulent acceptance.
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+    # Visual Process Timeline Display
+    if getattr(st.session_state, "staged_demo_result", None) is not None:
+        st.markdown("---")
+        st.markdown("#### STAGE-BY-STAGE PROCESS TIMELINE")
+        demo_data = st.session_state.staged_demo_result
+
+        for stage in demo_data["stages"]:
+            status_cls = "pipeline-step" if stage["status"] in ("COMPLETED", "ACCEPTED") else "pipeline-step-failed"
+            badge_cls = "status-badge-accept" if stage["status"] in ("COMPLETED", "ACCEPTED") else ("status-badge-reject" if stage["status"] in ("REJECTED", "FAILED") else "status-badge-warn")
+
             st.markdown(
                 f"""
-                <div class="eve-card">
-                    <span class="badge-reject" style="font-size: 1rem;">🔴 ATTACK DETECTED & ISOLATED</span>
-                    <h4 style="color: #f87171; margin: 8px 0 4px 0;">Rejection Code: {a_res['rejection_code']}</h4>
-                    <p style="font-size: 0.85rem; color: #fca5a5; margin: 0;">
-                        Detection Layer: <strong>{a_res['detection_layer']}</strong> | Defense Status: <strong>{a_res['defense_status']}</strong><br>
-                        Execution Latency: <strong>{a_res['elapsed_ms']} ms</strong>
-                    </p>
+                <div class="{status_cls}">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-weight: 700; font-size: 0.95rem; color: var(--text-bright);">{stage['code']}: {stage['name']}</span>
+                        <span class="status-badge {badge_cls}">{stage['status']} ({stage['elapsed_ms']} ms)</span>
+                    </div>
+                    <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">ACTOR: {stage['actor']}</div>
+                    <p style="font-size: 0.85rem; color: var(--text-main); margin: 6px 0 8px 0;">{stage['summary']}</p>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
 
-            # Details
-            st.metric("Adversarial Mismatch Rate", f"{a_res['threat_score'].qds_mismatch_rate*100:.1f}%", delta="Above Threshold c1", delta_color="inverse")
+            # Expandable Intermediate Technical Artifacts
+            with st.expander(f"Inspect {stage['code']} Technical Artifacts", expanded=False):
+                st.json(stage["artifacts"])
+
+        # Latency Breakdown Table
+        st.markdown("##### Latency Breakdown across Stages")
+        timing_rows = [
+            {"Stage": s["code"] + " — " + s["name"], "Latency (ms)": f"{s['elapsed_ms']} ms", "Status": s["status"]}
+            for s in demo_data["stages"]
+        ]
+        timing_rows.append({"Stage": "TOTAL PROTOCOL RUNTIME", "Latency (ms)": f"{demo_data['total_elapsed_ms']} ms", "Status": "COMPLETED"})
+        st.dataframe(pd.DataFrame(timing_rows), use_container_width=True, hide_index=True)
 
 
 # ===========================================================================
-# DEVELOPER / DEBUG MODE (OFF BY DEFAULT)
+# DIAGNOSTICS / DEBUG MODE (OFF BY DEFAULT)
 # ===========================================================================
 if developer_mode:
     st.markdown("---")
-    st.subheader("🛠️ Developer / Debug Diagnostics")
-    with st.expander("Session Details & Raw State Inspection", expanded=True):
+    st.subheader("DIAGNOSTICS & RAW PROTOCOL STATE")
+    with st.expander("Session Internal Handle & Crypto Context", expanded=True):
         st.json({
             "session_id": state.session.session_id,
             "challenge": state.session.challenge,
             "current_sequence_number": state.session.current_sequence_number,
             "n_positions": state.n_positions,
             "fingerprint_qubits": state.fingerprint_qubits,
-            "trusted_classical_pub_key_snippet": state.trusted_classical_pub_key[:32] + "...",
-            "history_entries": len(state.history),
+            "trusted_classical_pub_key_prefix": state.trusted_classical_pub_key[:32] + "...",
+            "history_log_count": len(state.history),
+            "current_ui_theme": st.session_state.ui_theme,
         })

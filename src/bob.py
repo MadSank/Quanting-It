@@ -69,6 +69,8 @@ class Bob:
         self.key_register = register
         self.qds_verifier.key_register = register
 
+    set_key_register = receive_public_keys
+
     def verify_packet(
         self,
         packet: SecurePacket,

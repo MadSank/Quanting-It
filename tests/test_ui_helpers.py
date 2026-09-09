@@ -21,6 +21,8 @@ from src.ui_helpers import (
     run_teleportation_transport_demo,
     get_copy_budget_metrics,
     format_masked_key,
+    prepare_fresh_transaction_keys,
+    are_verifier_keys_consumed,
 )
 
 
@@ -163,3 +165,103 @@ def test_verify_without_signing_raises():
     state.current_packet = None
     with pytest.raises(ValueError, match="No packet available"):
         verify_packet(state)
+
+
+def test_attack_catalogue_completeness():
+    """Verify that ATTACK_CATALOGUE contains 22 well-formed threat vectors."""
+    from src.ui_helpers import ATTACK_CATALOGUE
+    assert len(ATTACK_CATALOGUE) == 22
+    for entry in ATTACK_CATALOGUE:
+        assert entry["attack_id"].startswith("ATK-")
+        assert len(entry["name"]) > 0
+        assert entry["category"] in (
+            "CLASSICAL CONTROL-PLANE",
+            "IDENTITY & AUTHENTICATION",
+            "REPLAY & PROTOCOL",
+            "QDS & CRYPTOGRAPHIC",
+            "QUANTUM CHANNEL",
+            "RESOURCE & CONSTRAINTS",
+        )
+        assert entry["defense_status"] in ("DETECTED", "PREVENTED", "MITIGATED", "OUT_OF_SCOPE", "NOT_DETECTABLE")
+        assert isinstance(entry["attack_type"], AttackType)
+
+
+def test_measure_e91_detailed():
+    """Verify detailed E91 measurement returns proper baseline and disturbance metrics."""
+    from src.ui_helpers import measure_e91_detailed
+    clean = measure_e91_detailed(num_pairs=50, attack_type="NONE")
+    assert clean["error_rate"] == 0.0
+    assert clean["channel_status"] == "NORMAL"
+    assert clean["detected"] is False
+
+    disturbed = measure_e91_detailed(num_pairs=100, attack_type="INTERCEPT_RESEND")
+    assert disturbed["error_rate"] > 0.05
+    assert disturbed["attack_simulated"] == "INTERCEPT_RESEND"
+
+
+def test_staged_demo_pipeline_honest():
+    """Verify 7-stage honest demonstration timeline pipeline."""
+    from src.ui_helpers import run_staged_demo_pipeline
+    demo = run_staged_demo_pipeline(mode="HONEST", n_positions=16)
+    assert demo["success"] is True
+    assert demo["decision"] == "ACCEPTED"
+    assert len(demo["stages"]) == 7
+    for s in demo["stages"]:
+        assert s["status"] in ("COMPLETED", "ACCEPTED")
+        assert len(s["artifacts"]) > 0
+
+
+def test_staged_demo_pipeline_adversarial():
+    """Verify 7-stage adversarial demonstration timeline pipeline."""
+    from src.ui_helpers import run_staged_demo_pipeline
+    demo = run_staged_demo_pipeline(
+        mode="ADVERSARIAL",
+        attack_type=AttackType.FORGERY_ATTEMPT,
+        n_positions=16,
+    )
+    assert demo["success"] is False
+    assert demo["decision"] == "REJECTED"
+    assert len(demo["stages"]) == 7
+    assert demo["stages"][3]["status"] == "INTERCEPTED"
+    assert demo["stages"][5]["status"] == "REJECTED"
+
+
+def test_consecutive_preset_scenarios_signing_and_verification():
+    """
+    Validate that consecutive preset scenarios (e.g. HIGH-VALUE WIRE followed by GRID COMMAND)
+    both verify cleanly through Bob and Charlie without failing due to copy exhaustion.
+    """
+    state = initialize_protocol_session(n_positions=16, fingerprint_qubits=8)
+
+    # 1. First scenario: HIGH-VALUE WIRE
+    payload_wire = "AUTHORIZE $1,000,000,000 WIRE SETTLEMENT TO AUDITED ESCROW 9482"
+    wire_pkt, t_sign1 = sign_message(state, payload_wire)
+    assert wire_pkt.message == payload_wire
+
+    bob_res1, _ = verify_packet(state, wire_pkt)
+    assert bob_res1.threat_score.is_accepted is True
+    assert bob_res1.threat_score.qds_mismatch_rate == 0.0
+
+    charlie_res1, _ = transfer_to_charlie(state, wire_pkt)
+    assert charlie_res1.outcome == VerificationOutcome.ACC_1
+    assert charlie_res1.mismatch_rate == 0.0
+
+    # Bob's keys should now be detected as consumed
+    assert are_verifier_keys_consumed(state) is True
+
+    # 2. Second scenario: GRID COMMAND (after preparing fresh transaction keys)
+    prepare_fresh_transaction_keys(state)
+    assert are_verifier_keys_consumed(state) is False
+
+    payload_grid = "OPERATIONAL_DISPATCH_FEEDER_ISOLATION_SUBSTATION_04"
+    grid_pkt, t_sign2 = sign_message(state, payload_grid)
+    assert grid_pkt.message == payload_grid
+
+    bob_res2, _ = verify_packet(state, grid_pkt)
+    assert bob_res2.threat_score.is_accepted is True
+    assert bob_res2.threat_score.qds_mismatch_rate == 0.0
+
+    charlie_res2, _ = transfer_to_charlie(state, grid_pkt)
+    assert charlie_res2.outcome == VerificationOutcome.ACC_1
+    assert charlie_res2.mismatch_rate == 0.0
+

@@ -132,6 +132,43 @@ def initialize_protocol_session(
     )
 
 
+def are_verifier_keys_consumed(state: ProtocolState) -> bool:
+    """
+    Check if any of Bob's or Charlie's quantum public key copies have been consumed
+    by a prior verification in the current session.
+    """
+    if state.bob is None or state.bob.key_register is None:
+        return True
+    return any(
+        c.status.name == "CONSUMED"
+        for c in state.bob.key_register.copies.values()
+    )
+
+
+def prepare_fresh_transaction_keys(state: ProtocolState) -> None:
+    """
+    Replenishes fresh quantum key pairs and public key registers for Alice, Bob, and Charlie
+    prior to signing a new transaction, upholding the Gottesman-Chuang single-use key specification
+    while preserving session context and verification history.
+    """
+    private_key_bits = getattr(state.alice.key_pair, "private_key_length", 128)
+    max_copies = getattr(state.alice.key_pair, "max_total_copies", 4)
+    key_pair = GCKeyGenerator.generate(
+        n_positions=state.n_positions,
+        fingerprint_qubits=state.fingerprint_qubits,
+        private_key_bits=private_key_bits,
+        max_total_copies=max_copies,
+    )
+    state.alice.key_pair = key_pair
+    registers = state.alice.distribute_public_keys(["Bob", "Charlie"], teleport=True)
+    state.bob.receive_public_keys(registers["Bob"])
+    state.charlie_register = registers["Charlie"]
+    state.charlie_verifier.key_register = registers["Charlie"]
+    state.current_packet = None
+    state.last_result = None
+    state.last_charlie_result = None
+
+
 def sign_message(state: ProtocolState, message: str) -> Tuple[SecurePacket, float]:
     """
     Alice signs a message using her classical private keys and binds the canonical ML-DSA transcript.
@@ -231,10 +268,15 @@ def execute_attack_scenario(
 ) -> Tuple[SecurePacket, AttackResult, float]:
     """
     Executes a real backend attack against the live pipeline.
-    Creates a fresh session or state if needed to prevent contamination.
+    Creates a fresh isolated session to prevent contaminating active console key registers.
     """
+    attack_state = initialize_protocol_session(
+        n_positions=state.n_positions,
+        fingerprint_qubits=state.fingerprint_qubits,
+    )
+
     # 1. Sign original packet
-    packet, _ = sign_message(state, custom_message)
+    packet, _ = sign_message(attack_state, custom_message)
 
     tampered_packet = packet
     simulate_e91 = "NONE"
@@ -254,7 +296,7 @@ def execute_attack_scenario(
         msg_bytes = packet.message.encode("utf-8") if isinstance(packet.message, str) else packet.message
         tampered_packet.qds_signature = Eve.forge_gc_signature(
             message=msg_bytes,
-            n_positions=state.n_positions,
+            n_positions=attack_state.n_positions,
             key_bytes=16,
             session_id=packet.session_id,
             sequence_number=packet.sequence_number,
@@ -263,14 +305,14 @@ def execute_attack_scenario(
         tampered_packet = Eve.tamper_sequence(packet, 9999)
     elif attack_type == AttackType.REPLAY:
         # First verify honest packet to consume copy and advance sequence
-        state.bob.verify_packet(packet)
+        attack_state.bob.verify_packet(packet)
         # Now replay the same packet
         tampered_packet = packet
     elif attack_type == AttackType.KEY_SUBSTITUTION:
         tampered_packet = Eve.tamper_revealed_key(packet, position_idx=0)
     elif attack_type == AttackType.PROOF_SUBSTITUTION:
         # Swap with signature from a different message
-        other_pkt, _ = sign_message(state, "DIFFERENT_MESSAGE")
+        other_pkt, _ = sign_message(attack_state, "DIFFERENT_MESSAGE")
         tampered_packet.qds_signature = other_pkt.qds_signature
     elif attack_type == AttackType.COMPROMISED_SESSION_CONTEXT:
         tampered_packet.session_id = "stolen_session_id_xyz"
@@ -280,37 +322,38 @@ def execute_attack_scenario(
         simulate_e91 = "INTERCEPT_RESEND"
     elif attack_type == AttackType.IMPERSONATION:
         from src.crypto import compute_message_hash
-        seq_num = state.session.current_sequence_number + 1
+        seq_num = attack_state.session.current_sequence_number + 1
         msg = custom_message
-        msg_hash = compute_message_hash(msg, state.session.session_id, state.session.challenge, seq_num)
+        msg_hash = compute_message_hash(msg, attack_state.session.session_id, attack_state.session.challenge, seq_num)
         forged_sig = Eve.forge_gc_signature(
             message=msg.encode("utf-8"),
-            n_positions=state.n_positions,
+            n_positions=attack_state.n_positions,
             key_bytes=16,
-            session_id=state.session.session_id,
+            session_id=attack_state.session.session_id,
             sequence_number=seq_num,
         )
         tampered_packet = SecurePacket(
-            session_id=state.session.session_id,
+            session_id=attack_state.session.session_id,
             sequence_number=seq_num,
             message=msg,
             message_hash=msg_hash,
             qds_signature=forged_sig,
         )
     elif attack_type == AttackType.CROSS_SESSION_REUSE:
-        other_state = initialize_protocol_session(n_positions=state.n_positions)
+        other_state = initialize_protocol_session(n_positions=attack_state.n_positions)
         other_pkt, _ = sign_message(other_state, custom_message)
         tampered_packet = other_pkt
     elif attack_type == AttackType.COPY_EXHAUSTION:
         # Repeatedly verify until all copies in Bob's register are consumed
-        for _ in range(state.bob.key_register.max_copies_per_position + 1):
-            temp_pkt, _ = sign_message(state, f"EXHAUST_COPY_{_}")
-            state.bob.verify_packet(temp_pkt)
+        max_copies = getattr(attack_state.alice.key_pair, "max_total_copies", 4)
+        for _ in range(max_copies + 1):
+            temp_pkt, _ = sign_message(attack_state, f"EXHAUST_COPY_{_}")
+            attack_state.bob.verify_packet(temp_pkt)
         tampered_packet = packet
     elif attack_type == AttackType.UNAUTHORIZED_VERIFICATION:
         from src.gc_keys import VerifierKeyRegister
-        unauth_reg = VerifierKeyRegister(verifier_id="Eve", max_copies_per_position=0)
-        state.bob.key_register = unauth_reg
+        unauth_reg = VerifierKeyRegister(owner="Eve")
+        attack_state.bob.key_register = unauth_reg
         tampered_packet = packet
     elif attack_type == AttackType.REPUDIATION_ATTEMPT:
         tampered_packet = packet
@@ -318,12 +361,12 @@ def execute_attack_scenario(
     elif attack_type == AttackType.TRANSFERABILITY_ATTACK:
         tampered_packet = Eve.tamper_revealed_key(packet, position_idx=0)
     elif attack_type in (AttackType.QUANTUM_X, AttackType.QUANTUM_Z, AttackType.QUANTUM_Y, AttackType.QUANTUM_DEPOLARIZING):
-        fake_sv = Statevector.from_label("0" * state.fingerprint_qubits)
-        Eve.substitute_public_key(state.bob.key_register, position=0, bit=0, fake_state=fake_sv)
-        Eve.substitute_public_key(state.bob.key_register, position=0, bit=1, fake_state=fake_sv)
+        fake_sv = Statevector.from_label("0" * attack_state.fingerprint_qubits)
+        Eve.substitute_public_key(attack_state.bob.key_register, position=0, bit=0, fake_state=fake_sv)
+        Eve.substitute_public_key(attack_state.bob.key_register, position=0, bit=1, fake_state=fake_sv)
         tampered_packet = packet
     elif attack_type == AttackType.HOLEVO_EXHAUSTION:
-        for copy in state.bob.key_register.copies.values():
+        for copy in attack_state.bob.key_register.copies.values():
             copy.status = CopyStatus.CONSUMED
         tampered_packet = packet
     else:
@@ -331,10 +374,14 @@ def execute_attack_scenario(
         from src.attack_simulator import AttackSimulator
         sim = AttackSimulator(state.n_positions)
         res = sim.run_attack(attack_type, f"attack_{attack_type.value}")
+        state.last_result = res
         return packet, res, 1.0
 
-    # 3. Bob verifies the packet
-    result, elapsed_ms = verify_packet(state, tampered_packet, simulate_e91=simulate_e91)
+    # 3. Bob verifies the packet using attack_state
+    result, elapsed_ms = verify_packet(attack_state, tampered_packet, simulate_e91=simulate_e91)
+    state.last_result = result
+    if attack_state.history:
+        state.history.append(attack_state.history[-1])
     return tampered_packet, result, elapsed_ms
 
 
@@ -514,3 +561,676 @@ def format_masked_key(key_bytes: bytes, visible_bytes: int = 2) -> str:
     hex_str = key_bytes.hex()
     prefix = hex_str[: visible_bytes * 2]
     return f"{prefix}••••••••••••••••"
+
+
+# ---------------------------------------------------------------------------
+# Complete Attack Matrix Catalogue (Grounded in ATTACK_MATRIX.md & metrics.py)
+# ---------------------------------------------------------------------------
+ATTACK_CATALOGUE: List[Dict[str, Any]] = [
+    {
+        "attack_id": "ATK-01",
+        "attack_type": AttackType.MESSAGE_TAMPERING,
+        "name": "Message Content Tampering",
+        "category": "CLASSICAL CONTROL-PLANE",
+        "description": "Adversary alters plaintext message string in transit after Alice generates the signature.",
+        "target_component": "Classical Payload",
+        "applicable": True,
+        "detection_method": "SHA-256 Digest Re-computation",
+        "system_response": "Layer 3 Abort: Recomputed digest diverges; packet processing is rejected.",
+        "defense_status": "DETECTED",
+        "detection_layer": "CLASSICAL_HASH",
+        "rejection_code": "HASH_MISMATCH",
+        "typical_mismatch": "100.0%",
+        "threat_level": "HIGH",
+        "why_it_fails": "Bob locally recomputes H(m || sess || chal || seq). Tampering in m causes Avalanche divergence in the 256-bit hash, immediately failing Layer 3 check.",
+        "test_reference": "tests/test_hash_integrity.py",
+    },
+    {
+        "attack_id": "ATK-02",
+        "attack_type": AttackType.HASH_TAMPERING,
+        "name": "Hash Binding Tampering",
+        "category": "CLASSICAL CONTROL-PLANE",
+        "description": "Adversary substitutes or tampers with the message_hash field in SecurePacket.",
+        "target_component": "Classical Digest Binding",
+        "applicable": True,
+        "detection_method": "Session Challenge Verification",
+        "system_response": "Layer 3 Abort: Digest does not match expectation from local challenge.",
+        "defense_status": "DETECTED",
+        "detection_layer": "CLASSICAL_HASH",
+        "rejection_code": "HASH_MISMATCH",
+        "typical_mismatch": "100.0%",
+        "threat_level": "HIGH",
+        "why_it_fails": "The session challenge is known to Alice and Bob from the authenticated handshake. An adversary cannot produce a valid hash binding without the ephemeral challenge.",
+        "test_reference": "tests/test_hash_integrity.py",
+    },
+    {
+        "attack_id": "ATK-03",
+        "attack_type": AttackType.SIGNATURE_TAMPERING,
+        "name": "ML-DSA Canonical Transcript Tampering",
+        "category": "CLASSICAL CONTROL-PLANE",
+        "description": "Adversary tampers with the auxiliary NIST ML-DSA-65 post-quantum signature or canonical transcript.",
+        "target_component": "Classical Control-Plane Authentication",
+        "applicable": True,
+        "detection_method": "FIPS-204 MLDSA65 Verification",
+        "system_response": "Layer 3.5 Abort: Asymmetric lattice-based cryptographic verification failure.",
+        "defense_status": "DETECTED",
+        "detection_layer": "ML_DSA_VERIFICATION",
+        "rejection_code": "ML_DSA_INVALID",
+        "typical_mismatch": "N/A (Lattice Auth Failure)",
+        "threat_level": "HIGH",
+        "why_it_fails": "ML-DSA-65 signing binds session_id, sequence, hash, and quantum metadata into a single transcript. Any tampering breaks post-quantum unforgeability.",
+        "test_reference": "tests/test_classical_channel.py",
+    },
+    {
+        "attack_id": "ATK-04",
+        "attack_type": AttackType.SEQUENCE_TAMPERING,
+        "name": "Sequence Number Tampering",
+        "category": "CLASSICAL CONTROL-PLANE",
+        "description": "Adversary alters the sequential packet sequence number to desynchronize communication.",
+        "target_component": "Session Sequence Counter",
+        "applicable": True,
+        "detection_method": "Monotonic Sequence Window Enforcement",
+        "system_response": "Layer 2 Abort: Non-sequential sequence number rejected.",
+        "defense_status": "DETECTED",
+        "detection_layer": "REPLAY_PROTECTION",
+        "rejection_code": "REPLAY_DETECTED",
+        "typical_mismatch": "N/A (Sequence Abort)",
+        "threat_level": "MEDIUM",
+        "why_it_fails": "SessionManager enforces strictly monotonic sequence numbers (seq == current + 1). Arbitrary sequence numbers are immediately dropped.",
+        "test_reference": "tests/test_replay.py",
+    },
+    {
+        "attack_id": "ATK-05",
+        "attack_type": AttackType.COMPROMISED_SESSION_CONTEXT,
+        "name": "Compromised Session Identifier",
+        "category": "CLASSICAL CONTROL-PLANE",
+        "description": "Adversary injects a foreign, expired, or synthetic session ID into the transmission.",
+        "target_component": "Session Boundary",
+        "applicable": True,
+        "detection_method": "Active Session State Verification",
+        "system_response": "Layer 1 Abort: Unrecognized session ID rejected before quantum verification.",
+        "defense_status": "DETECTED",
+        "detection_layer": "SESSION_STATE",
+        "rejection_code": "INVALID_SESSION",
+        "typical_mismatch": "N/A (Session Abort)",
+        "threat_level": "HIGH",
+        "why_it_fails": "Bob verifies that packet.session_id matches the active authenticated session handle. Foreign identifiers are rejected at the perimeter.",
+        "test_reference": "tests/test_session.py",
+    },
+    {
+        "attack_id": "ATK-06",
+        "attack_type": AttackType.FORGERY_ATTEMPT,
+        "name": "Direct Quantum Signature Forgery",
+        "category": "QDS & CRYPTOGRAPHIC",
+        "description": "Adversary crafts a fabricated signature without knowledge of Alice's 128-bit private keys.",
+        "target_component": "Quantum Fingerprint Overlap",
+        "applicable": True,
+        "detection_method": "Controlled-SWAP Test against Registered Fingerprints",
+        "system_response": "Layer 4 Rejection: Mismatch rate significantly exceeds acceptance threshold c1 (5%).",
+        "defense_status": "DETECTED",
+        "detection_layer": "QDS_VERIFICATION",
+        "rejection_code": "QDS_SWAP_TEST_THRESHOLD_EXCEEDED",
+        "typical_mismatch": "48.0% - 52.0%",
+        "threat_level": "CRITICAL",
+        "why_it_fails": "Gottesman-Chuang QOWF guarantees that random candidate keys have near-zero inner product with Alice's true key, yielding ~50% SWAP failure rate >> c1.",
+        "test_reference": "tests/test_forgery.py",
+    },
+    {
+        "attack_id": "ATK-07",
+        "attack_type": AttackType.IMPERSONATION,
+        "name": "Signer Impersonation Attack",
+        "category": "IDENTITY & AUTHENTICATION",
+        "description": "Adversary attempts to impersonate Alice by computing valid message hash for Bob's active session but signing with adversary key material.",
+        "target_component": "Signer Identity & Key Association",
+        "applicable": True,
+        "detection_method": "Controlled-SWAP Test against Alice's Public Keys",
+        "system_response": "Layer 4 Rejection: SWAP test mismatch with Bob's registered public keys from Alice.",
+        "defense_status": "DETECTED",
+        "detection_layer": "QDS_VERIFICATION",
+        "rejection_code": "QDS_SWAP_TEST_THRESHOLD_EXCEEDED",
+        "typical_mismatch": "50.0%",
+        "threat_level": "CRITICAL",
+        "why_it_fails": "Bob's public key register was pre-distributed by Alice. The adversary's candidate keys fail SWAP tests against Bob's registered copies.",
+        "test_reference": "tests/test_end_to_end_security.py",
+    },
+    {
+        "attack_id": "ATK-08",
+        "attack_type": AttackType.REPLAY,
+        "name": "Signature Replay Attack",
+        "category": "REPLAY & PROTOCOL",
+        "description": "Adversary intercepts a valid signed packet and re-transmits it at a later time.",
+        "target_component": "Public Key Copy Budget & Sequence State",
+        "applicable": True,
+        "detection_method": "Destructive Copy Consumption & Sequence Tracking",
+        "system_response": "Prevention & Rejection: Stale sequence rejected; quantum copies marked CONSUMED.",
+        "defense_status": "PREVENTED",
+        "detection_layer": "REPLAY_PROTECTION",
+        "rejection_code": "REPLAY_DETECTED",
+        "typical_mismatch": "N/A (Resource Depleted / Stale)",
+        "threat_level": "HIGH",
+        "why_it_fails": "Dual protection: (1) First verification destructively consumes Bob's public key copy; (2) Monotonic sequence increments, rejecting the replayed sequence number.",
+        "test_reference": "tests/test_replay.py",
+    },
+    {
+        "attack_id": "ATK-09",
+        "attack_type": AttackType.CROSS_SESSION_REUSE,
+        "name": "Cross-Session Signature Reuse",
+        "category": "REPLAY & PROTOCOL",
+        "description": "Adversary captures a legitimate signature from Session A and attempts verification in Session B.",
+        "target_component": "Session Cryptographic Salt",
+        "applicable": True,
+        "detection_method": "Session Challenge and Digest Verification",
+        "system_response": "Layer 1 / Layer 3 Abort: Session ID and challenge mismatch.",
+        "defense_status": "DETECTED",
+        "detection_layer": "SESSION_STATE",
+        "rejection_code": "INVALID_SESSION",
+        "typical_mismatch": "100.0%",
+        "threat_level": "HIGH",
+        "why_it_fails": "Every session generates an independent cryptographic challenge. Hashes and transcripts from Session A are invalid in Session B.",
+        "test_reference": "tests/test_end_to_end_security.py",
+    },
+    {
+        "attack_id": "ATK-10",
+        "attack_type": AttackType.KEY_SUBSTITUTION,
+        "name": "Single-Position Key Substitution",
+        "category": "IDENTITY & AUTHENTICATION",
+        "description": "Adversary selectively modifies the revealed private key at a single position index.",
+        "target_component": "Individual Key Position",
+        "applicable": True,
+        "detection_method": "Per-Position Controlled-SWAP Test",
+        "system_response": "Layer 4 Failure: SWAP test fails on the tampered position index.",
+        "defense_status": "DETECTED",
+        "detection_layer": "QDS_VERIFICATION",
+        "rejection_code": "QDS_SWAP_TEST_THRESHOLD_EXCEEDED",
+        "typical_mismatch": "3.1% - 50.0%",
+        "threat_level": "MEDIUM",
+        "why_it_fails": "Any modified 128-bit key generates an orthogonal fingerprint state, registering a 50% failure rate for that qubit and tripping threshold c1.",
+        "test_reference": "tests/test_gc_protocol.py",
+    },
+    {
+        "attack_id": "ATK-11",
+        "attack_type": AttackType.PROOF_SUBSTITUTION,
+        "name": "Proof / Signature Substitution",
+        "category": "IDENTITY & AUTHENTICATION",
+        "description": "Adversary substitutes the signature with a legitimate signature from a completely different message.",
+        "target_component": "Message-to-Key Mapping",
+        "applicable": True,
+        "detection_method": "Controlled-SWAP Test across Revealed Bit Positions",
+        "system_response": "Layer 4 Rejection: High mismatch rate on differing message bit positions.",
+        "defense_status": "DETECTED",
+        "detection_layer": "QDS_VERIFICATION",
+        "rejection_code": "QDS_SWAP_TEST_THRESHOLD_EXCEEDED",
+        "typical_mismatch": "25.0% - 50.0%",
+        "threat_level": "HIGH",
+        "why_it_fails": "Because message hashes differ, keys revealed for Message A do not match the expected message bits of Message B, causing widespread SWAP failure.",
+        "test_reference": "tests/test_gc_protocol.py",
+    },
+    {
+        "attack_id": "ATK-12",
+        "attack_type": AttackType.COPY_EXHAUSTION,
+        "name": "Quantum Copy Budget Depletion",
+        "category": "RESOURCE & CONSTRAINTS",
+        "description": "Adversary repeatedly triggers verification to exhaust verifier's finite public key copy budget.",
+        "target_component": "Finite Quantum Public-Key Ledger",
+        "applicable": True,
+        "detection_method": "Logical Copy Accounting Enforcer (T=4)",
+        "system_response": "Protocol Lock: Rejects verification when available copies are exhausted.",
+        "defense_status": "PREVENTED",
+        "detection_layer": "COPY_BUDGET",
+        "rejection_code": "NO_CLONING_BUDGET_EXHAUSTED",
+        "typical_mismatch": "N/A (Resource Depleted)",
+        "threat_level": "MEDIUM",
+        "why_it_fails": "The protocol explicitly enforces a finite budget T < L/n. When all distributed copies are consumed, subsequent verification attempts are refused.",
+        "test_reference": "tests/test_gc_keys.py",
+    },
+    {
+        "attack_id": "ATK-13",
+        "attack_type": AttackType.HOLEVO_EXHAUSTION,
+        "name": "Key Inversion / Holevo Extraction Attack",
+        "category": "RESOURCE & CONSTRAINTS",
+        "description": "Adversary attempts collective quantum measurements on public keys to reconstruct Alice's private key.",
+        "target_component": "Information-Theoretic Key Secrecy",
+        "applicable": True,
+        "detection_method": "Holevo Information Bound Proof (T * n <= 32 bits)",
+        "system_response": "Information Barrier: Mutual information strictly bounded below key entropy.",
+        "defense_status": "PREVENTED",
+        "detection_layer": "COPY_BUDGET",
+        "rejection_code": "NO_CLONING_BUDGET_EXHAUSTED",
+        "typical_mismatch": "N/A (Information-Theoretic Wall)",
+        "threat_level": "LOW",
+        "why_it_fails": "Holevo's theorem bounds accessible information to I_acc <= T * n = 32 bits. With L=128 bits, an entropy gap of Delta H = 96 bits structurally prevents key inversion.",
+        "test_reference": "tests/test_gc_keys.py",
+    },
+    {
+        "attack_id": "ATK-14",
+        "attack_type": AttackType.UNAUTHORIZED_VERIFICATION,
+        "name": "Unauthorized Verifier Execution",
+        "category": "RESOURCE & CONSTRAINTS",
+        "description": "An unregistered third party lacking legitimate public key material attempts verification.",
+        "target_component": "Verifier Key Register",
+        "applicable": True,
+        "detection_method": "Key Register Authorization Check",
+        "system_response": "Execution Refusal: Verifier lacks registered quantum public states.",
+        "defense_status": "PREVENTED",
+        "detection_layer": "COPY_BUDGET",
+        "rejection_code": "NO_CLONING_BUDGET_EXHAUSTED",
+        "typical_mismatch": "N/A (Unauthorized)",
+        "threat_level": "MEDIUM",
+        "why_it_fails": "Verification requires pre-distributed quantum public states delivered from Alice during the key distribution phase.",
+        "test_reference": "tests/test_gc_protocol.py",
+    },
+    {
+        "attack_id": "ATK-15",
+        "attack_type": AttackType.REPUDIATION_ATTEMPT,
+        "name": "Signer Repudiation Attempt",
+        "category": "QDS & CRYPTOGRAPHIC",
+        "description": "Alice attempts to craft a signature that Bob accepts (at threshold c1) but Charlie rejects (at threshold c2).",
+        "target_component": "Transferability & Non-Repudiation Gap",
+        "applicable": True,
+        "detection_method": "Calibrated Dual Threshold Gap (c1 = 0.05, c2 = 0.20)",
+        "system_response": "Dispute Prevention: Measured binomial gap guarantees non-repudiation.",
+        "defense_status": "PREVENTED",
+        "detection_layer": "QDS_VERIFICATION",
+        "rejection_code": "ACCEPTED",
+        "typical_mismatch": "0.0%",
+        "threat_level": "LOW",
+        "why_it_fails": "Threshold gap c2 - c1 is calibrated against binomial mismatch tails. Alice cannot forge states that pass Bob's test without also passing Charlie's test.",
+        "test_reference": "tests/test_gc_protocol.py",
+    },
+    {
+        "attack_id": "ATK-16",
+        "attack_type": AttackType.TRANSFERABILITY_ATTACK,
+        "name": "Transferability Disruption Attack",
+        "category": "QDS & CRYPTOGRAPHIC",
+        "description": "Adversary perturbs transferred signature to cause dispute between Bob and Charlie.",
+        "target_component": "Charlie's Arbiter Threshold (c2 = 0.20)",
+        "applicable": True,
+        "detection_method": "Independent Charlie Controlled-SWAP Test",
+        "system_response": "Dispute Resolution: Charlie evaluates against threshold c2.",
+        "defense_status": "DETECTED",
+        "detection_layer": "QDS_VERIFICATION",
+        "rejection_code": "QDS_SWAP_TEST_THRESHOLD_EXCEEDED",
+        "typical_mismatch": "20.0% - 35.0%",
+        "threat_level": "HIGH",
+        "why_it_fails": "Charlie independently measures against his own stored quantum public keys, rejecting any transferred signature exceeding c2.",
+        "test_reference": "tests/test_gc_protocol.py",
+    },
+    {
+        "attack_id": "ATK-17",
+        "attack_type": AttackType.INTERCEPT_RESEND,
+        "name": "Quantum Intercept-and-Resend Attack",
+        "category": "QUANTUM CHANNEL",
+        "description": "Eve intercepts quantum transmission, measures in random basis, and resends collapsed state to Bob.",
+        "target_component": "Quantum Channel Superposition",
+        "applicable": True,
+        "detection_method": "E91-Inspired Bell Correlation Monitoring & SWAP Test",
+        "system_response": "Dual Detection: Bell error rate spikes to ~25%; SWAP test mismatch increases.",
+        "defense_status": "DETECTED",
+        "detection_layer": "E91_CHANNEL",
+        "rejection_code": "E91_THRESHOLD_EXCEEDED",
+        "typical_mismatch": "25.0% - 50.0%",
+        "threat_level": "CRITICAL",
+        "why_it_fails": "Measurement in non-orthogonal basis collapses superposition, introducing irreversible 25% disturbance on matched bases and destroying state fidelity.",
+        "test_reference": "tests/test_e91_monitor.py",
+    },
+    {
+        "attack_id": "ATK-18",
+        "attack_type": AttackType.E91_CHANNEL_DISTURBANCE,
+        "name": "Bell-Correlation Entanglement Disturbance",
+        "category": "QUANTUM CHANNEL",
+        "description": "Eavesdropper disrupts entanglement correlations on the Bell-state distribution bus.",
+        "target_component": "EPR Pair Entanglement",
+        "applicable": True,
+        "detection_method": "E91-Inspired Matched-Basis Error Evaluation",
+        "system_response": "Channel Alert: Error rate exceeding 15% aborts quantum transport.",
+        "defense_status": "DETECTED",
+        "detection_layer": "E91_CHANNEL",
+        "rejection_code": "E91_THRESHOLD_EXCEEDED",
+        "typical_mismatch": "22.0% - 28.0%",
+        "threat_level": "HIGH",
+        "why_it_fails": "CHSH correlations cannot be measured by a third party without disrupting entanglement. Error rate jumps from baseline 0% to ~25%.",
+        "test_reference": "tests/test_e91_monitor.py",
+    },
+    {
+        "attack_id": "ATK-19",
+        "attack_type": AttackType.QUANTUM_X,
+        "name": "Pauli-X Channel Attack (Bit Flip)",
+        "category": "QUANTUM CHANNEL",
+        "description": "Coherent bit-flip disturbance applied to public key quantum statevector.",
+        "target_component": "Fingerprint Amplitude Basis",
+        "applicable": True,
+        "detection_method": "Controlled-SWAP Test",
+        "system_response": "Layer 4 Rejection: Amplitude permutation ruins state overlap.",
+        "defense_status": "DETECTED",
+        "detection_layer": "QDS_VERIFICATION",
+        "rejection_code": "QDS_SWAP_TEST_THRESHOLD_EXCEEDED",
+        "typical_mismatch": "50.0%",
+        "threat_level": "HIGH",
+        "why_it_fails": "Pauli-X permutes basis state amplitudes in |f_k>, altering the inner product and causing Controlled-SWAP test rejection.",
+        "test_reference": "tests/test_teleportation.py",
+    },
+    {
+        "attack_id": "ATK-20",
+        "attack_type": AttackType.QUANTUM_Z,
+        "name": "Pauli-Z Channel Attack (Phase Flip)",
+        "category": "QUANTUM CHANNEL",
+        "description": "Coherent phase-flip disturbance applied to phase-encoded quantum fingerprint.",
+        "target_component": "Phase Encoding Codeword",
+        "applicable": True,
+        "detection_method": "Controlled-SWAP Test",
+        "system_response": "Layer 4 Rejection: Phase inversion destroys constructive interference.",
+        "defense_status": "DETECTED",
+        "detection_layer": "QDS_VERIFICATION",
+        "rejection_code": "QDS_SWAP_TEST_THRESHOLD_EXCEEDED",
+        "typical_mismatch": "50.0%",
+        "threat_level": "HIGH",
+        "why_it_fails": "Fingerprint states encode key material strictly into phase factors (-1)^{E(k)_j}. A Pauli-Z operation directly flips codeword phases, collapsing overlap.",
+        "test_reference": "tests/test_teleportation.py",
+    },
+    {
+        "attack_id": "ATK-21",
+        "attack_type": AttackType.QUANTUM_Y,
+        "name": "Pauli-Y Channel Attack (Bit & Phase Flip)",
+        "category": "QUANTUM CHANNEL",
+        "description": "Simultaneous bit-flip and phase-flip disturbance on public key quantum states.",
+        "target_component": "Fingerprint Amplitudes & Phases",
+        "applicable": True,
+        "detection_method": "Controlled-SWAP Test",
+        "system_response": "Layer 4 Rejection: Severe state vector degradation.",
+        "defense_status": "DETECTED",
+        "detection_layer": "QDS_VERIFICATION",
+        "rejection_code": "QDS_SWAP_TEST_THRESHOLD_EXCEEDED",
+        "typical_mismatch": "50.0%",
+        "threat_level": "HIGH",
+        "why_it_fails": "Combines amplitude permutation with phase inversion, producing maximal divergence from expected fingerprint.",
+        "test_reference": "tests/test_teleportation.py",
+    },
+    {
+        "attack_id": "ATK-22",
+        "attack_type": AttackType.QUANTUM_DEPOLARIZING,
+        "name": "Depolarizing Quantum Channel Noise",
+        "category": "QUANTUM CHANNEL",
+        "description": "Environmental decoherence or depolarizing channel mixed with random density matrix.",
+        "target_component": "Quantum State Purity",
+        "applicable": True,
+        "detection_method": "Controlled-SWAP Test & Threshold Calibration",
+        "system_response": "Mitigation below c1; severe noise triggers Layer 4 rejection.",
+        "defense_status": "MITIGATED",
+        "detection_layer": "QDS_VERIFICATION",
+        "rejection_code": "QDS_SWAP_TEST_THRESHOLD_EXCEEDED",
+        "typical_mismatch": "Noise Rate * 50%",
+        "threat_level": "MEDIUM",
+        "why_it_fails": "Mild channel noise (< 5%) is absorbed by the calibrated acceptance threshold c1. Malicious noise exceeding c1 is rejected.",
+        "test_reference": "tests/test_threshold_calibration.py",
+    },
+]
+
+
+def measure_e91_detailed(
+    num_pairs: int = 100,
+    attack_type: str = "NONE",
+) -> Dict[str, Any]:
+    """
+    Executes an E91-inspired Bell correlation measurement run on AerSimulator.
+    Returns comprehensive metrics including baseline, current disturbance, matches,
+    errors, threshold comparison, and integrity status.
+    """
+    mon = E91Monitor(num_pairs=num_pairs, error_threshold=0.15)
+    stats = mon.measure_disturbance(attack_type=attack_type)
+
+    error_rate = stats.get("error_rate", 0.0)
+    matches = stats.get("matches", 0)
+    errors = stats.get("errors", 0)
+    threshold = mon.error_threshold
+
+    status = "NORMAL"
+    if error_rate > threshold:
+        status = "DISTURBED"
+    elif error_rate > (threshold * 0.7):
+        status = "SUSPICIOUS"
+
+    # CHSH-analogous correlation coefficient (1.0 for perfect correlation, 0.0 for uncorrelated)
+    correlation_coeff = max(-1.0, min(1.0, 1.0 - 2.0 * error_rate))
+
+    return {
+        "num_pairs": num_pairs,
+        "matches": matches,
+        "errors": errors,
+        "error_rate": round(error_rate, 4),
+        "error_rate_pct": f"{error_rate * 100:.2f}%",
+        "baseline_rate": 0.0,
+        "deviation": round(error_rate - 0.0, 4),
+        "threshold": threshold,
+        "threshold_pct": f"{threshold * 100:.1f}%",
+        "channel_status": status,
+        "correlation_coeff": round(correlation_coeff, 3),
+        "attack_simulated": attack_type,
+        "detected": error_rate > threshold,
+    }
+
+
+def run_staged_demo_pipeline(
+    mode: str = "HONEST",
+    attack_type: Optional[AttackType] = None,
+    n_positions: int = 32,
+    payload: str = "TRANSACTION_AUTHORIZATION_ORD_9824",
+) -> Dict[str, Any]:
+    """
+    Executes a structured 7-stage visual timeline demonstration:
+    Stage 01: Key Generation & Copy Distribution
+    Stage 02: Message Preparation & Session Binding
+    Stage 03: QDS Signing & ML-DSA Transcript Binding
+    Stage 04: Quantum State Transport (Teleportation adaptation)
+    Stage 05: Controlled-SWAP Test Verification
+    Stage 06: Protocol Decision & Dispute Resolution
+    Stage 07: Threat Engine Analysis & Metrics Scoring
+    """
+    total_start = time.perf_counter()
+    stages = []
+
+    # -----------------------------------------------------------------------
+    # STAGE 01: KEY GENERATION
+    # -----------------------------------------------------------------------
+    t0 = time.perf_counter()
+    state = initialize_protocol_session(n_positions=n_positions)
+    t_stage1_ms = (time.perf_counter() - t0) * 1000.0
+
+    stages.append({
+        "stage_num": 1,
+        "code": "STEP_01",
+        "name": "KEY GENERATION & COPY DISTRIBUTION",
+        "actor": "ALICE & REGISTRATION CHANNELS",
+        "status": "COMPLETED",
+        "elapsed_ms": round(t_stage1_ms, 1),
+        "summary": "Generated 64 private keys (L=128 bits); prepared and distributed quantum public key copies via teleportation.",
+        "artifacts": {
+            "alice_private_keys": f"{state.n_positions * 2} keys (128-bit classical)",
+            "bob_public_copies": f"{len(state.bob.key_register.copies)} copies in register",
+            "charlie_public_copies": f"{len(state.charlie_register.copies)} copies in register",
+            "fingerprint_dimension": f"{state.fingerprint_qubits} qubits (256 Hilbert space)",
+            "holevo_accessible_info": "32 bits (T=4 copies * 8 qubits)",
+            "holevo_entropy_gap": "96 bits (128 - 32)",
+        },
+    })
+
+    # -----------------------------------------------------------------------
+    # STAGE 02: MESSAGE PREPARATION
+    # -----------------------------------------------------------------------
+    t0 = time.perf_counter()
+    session = state.session
+    msg = payload
+    expected_hash = compute_message_hash(msg, session.session_id, session.challenge, session.current_sequence_number + 1)
+    t_stage2_ms = (time.perf_counter() - t0) * 1000.0
+
+    stages.append({
+        "stage_num": 2,
+        "code": "STEP_02",
+        "name": "MESSAGE PREPARATION & BINDING",
+        "actor": "ALICE",
+        "status": "COMPLETED",
+        "elapsed_ms": round(t_stage2_ms, 1),
+        "summary": "Constructed session-salted SHA-256 digest bound to active challenge and sequence index.",
+        "artifacts": {
+            "plaintext": msg,
+            "session_id": session.session_id,
+            "sequence_number": session.current_sequence_number + 1,
+            "session_challenge": session.challenge[:16] + "...",
+            "computed_hash": expected_hash,
+        },
+    })
+
+    # -----------------------------------------------------------------------
+    # STAGE 03: QDS SIGNING
+    # -----------------------------------------------------------------------
+    t0 = time.perf_counter()
+    packet, t_sign_ms = sign_message(state, msg)
+    t_stage3_ms = (time.perf_counter() - t0) * 1000.0
+
+    stages.append({
+        "stage_num": 3,
+        "code": "STEP_03",
+        "name": "QDS SIGNING & TRANSCRIPT BINDING",
+        "actor": "ALICE (SIGNER)",
+        "status": "COMPLETED",
+        "elapsed_ms": round(t_stage3_ms, 1),
+        "summary": "Revealed classical key k_{m_i} per position; bound canonical transcript with NIST ML-DSA-65 signature.",
+        "artifacts": {
+            "revealed_key_count": f"{len(packet.qds_signature.revealed_keys)} / {state.n_positions}",
+            "sample_revealed_key": format_masked_key(packet.qds_signature.revealed_keys[0]),
+            "ml_dsa_signature_len": f"{len(packet.ml_dsa_signature)} hex chars (ML-DSA-65)",
+            "ml_dsa_sample": packet.ml_dsa_signature[:24] + "..." + packet.ml_dsa_signature[-16:],
+        },
+    })
+
+    # -----------------------------------------------------------------------
+    # STAGE 04: QUANTUM STATE TRANSPORT & ADVERSARIAL INTERVENTION
+    # -----------------------------------------------------------------------
+    t0 = time.perf_counter()
+    effective_packet = packet
+    simulate_e91 = "NONE"
+    attack_applied = attack_type if mode == "ADVERSARIAL" else AttackType.NO_ATTACK
+    intervention_summary = "Transported quantum state over entanglement channel with EPR pairs and classical corrections."
+
+    if mode == "ADVERSARIAL" and attack_type:
+        effective_packet, res_atk, _ = execute_attack_scenario(state, attack_type, msg)
+        intervention_summary = f"Adversary intercepted channel and executed {attack_type.value}."
+
+    teleport_res = run_teleportation_transport_demo(
+        input_state_char="+",
+        channel_error="X" if attack_applied == AttackType.QUANTUM_X else ("NONE" if mode == "HONEST" else "DEPOLARIZING"),
+    )
+    t_stage4_ms = (time.perf_counter() - t0) * 1000.0
+
+    stages.append({
+        "stage_num": 4,
+        "code": "STEP_04",
+        "name": "QUANTUM STATE TRANSPORT",
+        "actor": "QUANTUM CHANNEL (TELEPORTATION TRANSPORT)" if mode == "HONEST" else "EVE (ADVERSARIAL INTERCEPTION)",
+        "status": "COMPLETED" if mode == "HONEST" else "INTERCEPTED",
+        "elapsed_ms": round(t_stage4_ms, 1),
+        "summary": intervention_summary,
+        "artifacts": {
+            "transport_mechanism": "Teleportation-based quantum state transport adaptation",
+            "bell_pair": "|Phi+> = (|00> + |11>)/sqrt(2)",
+            "classical_corrections": f"crz={teleport_res['crz_bit']}, crx={teleport_res['crx_bit']} -> Z^{teleport_res['crz_bit']} X^{teleport_res['crx_bit']}",
+            "reconstructed_fidelity": teleport_res["fidelity_pct"],
+            "adversarial_intervention": attack_applied.value,
+        },
+    })
+
+    # -----------------------------------------------------------------------
+    # STAGE 05: CONTROLLED-SWAP TEST VERIFICATION
+    # -----------------------------------------------------------------------
+    t0 = time.perf_counter()
+    res_bob, t_bob_ms = verify_packet(state, effective_packet, simulate_e91=simulate_e91)
+    t_stage5_ms = (time.perf_counter() - t0) * 1000.0
+
+    score = res_bob.threat_score
+    mismatch_rate = score.qds_mismatch_rate if score else 0.0
+
+    stages.append({
+        "stage_num": 5,
+        "code": "STEP_05",
+        "name": "CONTROLLED-SWAP TEST VERIFICATION",
+        "actor": "BOB (PRIMARY VERIFIER)",
+        "status": "COMPLETED",
+        "elapsed_ms": round(t_stage5_ms, 1),
+        "summary": f"Executed destructive Controlled-SWAP tests across {state.n_positions} positions. Mismatch rate: {mismatch_rate*100:.1f}%.",
+        "artifacts": {
+            "swap_tests_performed": state.n_positions,
+            "mismatch_count": getattr(score, "qds_n_mismatches", 0),
+            "mismatch_rate": f"{mismatch_rate*100:.2f}%",
+            "acceptance_threshold_c1": "5.0%",
+            "rejection_threshold_c2": "20.0%",
+            "copy_budget_consumed": "1 copy per verified position",
+        },
+    })
+
+    # -----------------------------------------------------------------------
+    # STAGE 06: DECISION & TRANSFERABILITY
+    # -----------------------------------------------------------------------
+    t0 = time.perf_counter()
+    decision = "ACCEPTED" if (score and score.is_accepted and res_bob.rejection_code == "ACCEPTED") else "REJECTED"
+    charlie_outcome = "NOT_EXECUTED"
+
+    if decision == "ACCEPTED":
+        res_charlie, _ = transfer_to_charlie(state, effective_packet)
+        charlie_outcome = res_charlie.outcome.value
+
+    t_stage6_ms = (time.perf_counter() - t0) * 1000.0
+
+    stages.append({
+        "stage_num": 6,
+        "code": "STEP_06",
+        "name": "PROTOCOL DECISION & DISPUTE EVALUATION",
+        "actor": "BOB & CHARLIE (ARBITER)",
+        "status": decision,
+        "elapsed_ms": round(t_stage6_ms, 1),
+        "summary": f"Protocol evaluated statistical thresholds. Final verification decision: {decision}.",
+        "artifacts": {
+            "bob_decision": decision,
+            "rejection_code": res_bob.rejection_code,
+            "detection_layer": res_bob.detection_layer,
+            "charlie_transfer_outcome": charlie_outcome,
+            "non_repudiation_status": "GUARANTEED (c1 < c2)" if decision == "ACCEPTED" else "DISPUTE PREVENTED",
+        },
+    })
+
+    # -----------------------------------------------------------------------
+    # STAGE 07: THREAT ENGINE ANALYSIS
+    # -----------------------------------------------------------------------
+    t0 = time.perf_counter()
+    threat_level = getattr(score, "threat_level", "HIGH" if decision == "REJECTED" else "LOW")
+    threat_score_val = getattr(score, "overall_threat_score", 0.85 if decision == "REJECTED" else 0.05)
+    t_stage7_ms = (time.perf_counter() - t0) * 1000.0
+
+    stages.append({
+        "stage_num": 7,
+        "code": "STEP_07",
+        "name": "THREAT ENGINE ANALYSIS",
+        "actor": "SOC THREAT SCORING ENGINE",
+        "status": "COMPLETED",
+        "elapsed_ms": round(t_stage7_ms, 1),
+        "summary": f"Categorized threat severity: {threat_level}. Defense status: {res_bob.defense_status.value}.",
+        "artifacts": {
+            "threat_level": threat_level,
+            "overall_threat_score": f"{threat_score_val:.2f} / 1.00",
+            "defense_status": res_bob.defense_status.value,
+            "detection_layer": res_bob.detection_layer,
+            "e91_disturbance_rate": f"{getattr(score, 'e91_error_rate', 0.0)*100:.1f}%",
+            "confidence": f"{getattr(score, 'overall_confidence', 1.0)*100:.1f}%",
+        },
+    })
+
+    total_elapsed_ms = (time.perf_counter() - total_start) * 1000.0
+
+    return {
+        "mode": mode,
+        "attack_type": attack_type,
+        "success": decision == "ACCEPTED",
+        "decision": decision,
+        "stages": stages,
+        "bob_result": res_bob,
+        "threat_score": score,
+        "total_elapsed_ms": round(total_elapsed_ms, 1),
+    }
