@@ -180,7 +180,9 @@ class GCVerifier:
             )
 
         # Step 0: Re-encode the message to verify consistency
-        expected_bits = GCSigner.encode_message(message, signature.n_positions)
+        context = GCSigner.binding_context(getattr(signature, "session_id", ""),
+                                           getattr(signature, "sequence_number", 0))
+        expected_bits = GCSigner.encode_message(message, signature.n_positions, context)
         message_bits_match = (expected_bits == signature.message_bits)
 
         # If message encoding doesn't match, reject immediately

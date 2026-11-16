@@ -91,7 +91,7 @@
       <h2 id="h2-inside">three locks on one sentence</h2>
       <div class="layers">
         <article><h3>light</h3><p>BB84 builds the key from single photons, 40,000 pulses a session. Above 11% errors the key is discarded.</p><p class="m spec">qsc/bb84.py</p></article>
-        <article><h3>lattices</h3><p>ML-KEM-768 and ML-DSA-65, the NIST post-quantum standards, cover what photons cannot.</p><p class="m spec">qsc/channel.py</p></article>
+        <article><h3>lattices</h3><p>ML-KEM-768 and ML-DSA-65, the NIST post-quantum standards, cover what photons cannot. Every handshake message is signed.</p><p class="m spec">qsc/channel.py</p></article>
         <article><h3>one-time keys</h3><p>The signature scheme of Gottesman and Chuang: 32 positions, 128-bit keys, each checked by a destructive SWAP test.</p><p class="m spec">qds_signer.py, swap_test.py</p></article>
       </div>
     </div>
@@ -110,10 +110,11 @@
           <tbody>
             <tr><td>Passive tap</td><td class="m">v0</td><td class="m bad">1.00</td><td class="m">0</td></tr>
             <tr><td>Passive tap</td><td class="m">v1</td><td class="m good">0.00</td><td class="m">0</td></tr>
-            <tr><td>Active attacks</td><td class="m">v0, v1</td><td colspan="2" class="muted">next round</td></tr>
+            <tr><td>Passive tap</td><td class="m">v2</td><td class="m good">0.00</td><td class="m">0</td></tr>
+            <tr><td>Tampering, replay, stripped tags</td><td class="m">v2</td><td colspan="2" class="good">rejected, pinned by regression tests</td></tr>
           </tbody>
         </table>
-        <pre class="cmd m"><span class="p">$</span> python -m redteam.judge redteam/attacks/example_passive.py --versions v0 v1</pre>
+        <pre class="cmd m"><span class="p">$</span> python -m redteam.judge redteam/attacks/example_passive.py --versions v0 v1 v2</pre>
       </div>
     </div>
   </section>
@@ -126,7 +127,7 @@
 <span class="p">$</span> python -m venv .venv
 <span class="p">$</span> .venv/Scripts/pip install -r requirements.txt
 <span class="p">$</span> .venv/Scripts/streamlit run app.py</pre>
-      <div class="run-foot"><button class="choice" id="copy" type="button">Copy commands</button><span>171 tests pass with <span class="m">pytest tests</span>.</span></div>
+      <div class="run-foot"><button class="choice" id="copy" type="button">Copy commands</button><span>186 tests pass with <span class="m">pytest tests</span>.</span></div>
     </div>
   </section>
 </main>

@@ -1,4 +1,6 @@
-import random
+import secrets
+
+random = secrets.SystemRandom()  # CSPRNG for basis choices
 import numpy as np
 from qiskit import QuantumCircuit
 from qiskit_aer import AerSimulator

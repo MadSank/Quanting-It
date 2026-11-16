@@ -64,6 +64,12 @@ class SessionManager:
         self.current_session.start_session(challenge)
         self.current_session.activate()
         
+    def is_sequence_fresh(self, sequence_number: int) -> bool:
+        """True if this sequence number is positive and has not been accepted yet."""
+        if not self.current_session or not isinstance(sequence_number, int) or sequence_number <= 0:
+            return False
+        return sequence_number not in self.current_session.consumed_sequences
+
     def verify_sequence_number(self, sequence_number: int) -> bool:
         if not self.current_session:
             return False

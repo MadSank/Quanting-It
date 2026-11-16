@@ -54,7 +54,7 @@ footer { border-top: 1px solid var(--color-rule); padding: 24px 0 40px; font-siz
 footer .wrap { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 @media (max-width: 900px) {
   .story { grid-template-columns: minmax(0, 1fr); }
-  .stage { top: 0; height: auto; padding: 16px 0; background: var(--color-paper); z-index: 2; }
+  .stage { top: 57px; height: auto; padding: 16px 0; background: var(--color-paper); z-index: 2; }
   .step { min-height: 60vh; }
 }
 @media (prefers-reduced-motion: reduce) { .step { opacity: 1; transition: none; } .btn, .choice { transition: none; } }

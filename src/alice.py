@@ -3,7 +3,7 @@ import time
 from typing import Any, Optional, List, Dict
 from src.session import SessionManager
 from src.packet import SecurePacket
-from src.crypto import compute_message_hash
+from src.crypto import compute_message_hash, canonical_transcript
 from src.qpkd import QPKDSession
 from src.qds_signer import GCSigner, GCSignature, QDSSigner
 from src.gc_keys import GCKeyPair, GCKeyGenerator, VerifierKeyRegister
@@ -120,19 +120,16 @@ class Alice:
         if self.classical_pub_key:
             signature.classical_pub_key = self.classical_pub_key
 
-        # 3. Canonical ML-DSA Transcript Signing (Auxiliary Post-Quantum Layer)
-        canonical_transcript = (
-            f"{session.session_id}||{seq_num}||{msg_hash}||"
-            f"{signature.correction_bits[:32]}||n_positions={signature.n_positions}"
+        # 3. ML-DSA over the full canonical transcript (session, seq, hash,
+        #    every revealed key, message bits, parameters)
+        transcript = canonical_transcript(
+            session.session_id, seq_num, msg_hash, signature.revealed_keys,
+            signature.message_bits, signature.n_positions, signature.fingerprint_qubits,
         )
+        canonical_transcript_hex = transcript.hex()
         ml_dsa_sig = None
         if self.classical_priv_key:
-            try:
-                ml_dsa_sig = self.classical_priv_key.sign(
-                    canonical_transcript.encode("utf-8")
-                ).hex()
-            except Exception:
-                ml_dsa_sig = None
+            ml_dsa_sig = self.classical_priv_key.sign(transcript).hex()
 
         # 4. Assemble SecurePacket
         packet = SecurePacket(
@@ -147,7 +144,7 @@ class Alice:
                 "timestamp": time.time(),
                 "n_positions": self.key_pair.n_positions,
                 "fingerprint_qubits": self.key_pair.fingerprint_qubits,
-                "canonical_transcript": canonical_transcript,
+                "canonical_transcript": canonical_transcript_hex,
             }
         )
         return packet

@@ -8,7 +8,9 @@ Does NOT claim complete E91 QKD; provides Bell-correlation channel monitoring.
 """
 
 import hashlib
-import random
+import secrets
+
+random = secrets.SystemRandom()  # CSPRNG for basis choices
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
 

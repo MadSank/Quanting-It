@@ -15,6 +15,12 @@ new version as a regression test.
 | `redteam/attacks/` | Attack plugins (`class Attack(Adversary)`) | everyone |
 | `redteam/results/` | Judge output per attack | everyone |
 
+## Versions
+
+* `v0` legacy signed packet, sent in clear
+* `v1` first draft: BB84 key and AES-256-GCM
+* `v2` hardened channel, see `docs/HARDENING.md`
+
 ## Threat model
 
 Eve controls the network:

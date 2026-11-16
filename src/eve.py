@@ -150,7 +150,7 @@ class Eve:
         """
         import os
         from src.qds_signer import GCSigner
-        message_bits = GCSigner.encode_message(message, n_positions)
+        message_bits = GCSigner.encode_message(message, n_positions, GCSigner.binding_context(session_id, sequence_number))
         forged_keys = [os.urandom(key_bytes) for _ in range(n_positions)]
         return GCSignature(
             message=message,

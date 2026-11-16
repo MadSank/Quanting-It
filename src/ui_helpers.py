@@ -178,6 +178,10 @@ def sign_message(state: ProtocolState, message: str) -> Tuple[SecurePacket, floa
     if not message:
         message = "EMPTY_PAYLOAD"
 
+    # GC keys are one-time: a used pair is replaced before the next signature.
+    if getattr(state.alice.key_pair, "used", False):
+        prepare_fresh_transaction_keys(state)
+
     start_time = time.perf_counter()
     packet = state.alice.create_packet(message, n_qubits=state.n_positions)
     elapsed_ms = (time.perf_counter() - start_time) * 1000.0
@@ -313,6 +317,7 @@ def execute_attack_scenario(
         tampered_packet = Eve.tamper_revealed_key(packet, position_idx=0)
     elif attack_type == AttackType.PROOF_SUBSTITUTION:
         # Swap with signature from a different message
+        attack_state.alice.key_pair.used = False  # demo only: models a signer that reuses one-time keys
         other_pkt, _ = sign_message(attack_state, "DIFFERENT_MESSAGE")
         tampered_packet.qds_signature = other_pkt.qds_signature
     elif attack_type == AttackType.COMPROMISED_SESSION_CONTEXT:
@@ -348,6 +353,7 @@ def execute_attack_scenario(
         # Repeatedly verify until all copies in Bob's register are consumed
         max_copies = getattr(attack_state.alice.key_pair, "max_total_copies", 4)
         for _ in range(max_copies + 1):
+            attack_state.alice.key_pair.used = False  # demo only: models a signer that reuses one-time keys
             temp_pkt, _ = sign_message(attack_state, f"EXHAUST_COPY_{_}")
             attack_state.bob.verify_packet(temp_pkt)
         tampered_packet = packet

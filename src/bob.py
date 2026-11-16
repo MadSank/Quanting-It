@@ -1,7 +1,8 @@
+import hmac
 from typing import Any, Optional
 from src.session import SessionManager
 from src.packet import SecurePacket
-from src.crypto import compute_message_hash
+from src.crypto import compute_message_hash, canonical_transcript
 from src.qpkd import QPKDSession
 from src.qds_verifier import GCVerifier, GCVerificationResult, VerificationOutcome, QDSVerifier
 from src.gc_keys import VerifierKeyRegister
@@ -94,9 +95,11 @@ class Bob:
         session_valid = session is not None and packet.session_id == session.session_id
 
         # Layer 2: Replay Protection Check
-        replay_valid = session_valid and self.session_manager.verify_sequence_number(packet.sequence_number)
+        # Checked here, consumed only once the whole packet is accepted, so an
+        # invalid packet cannot use up the slot meant for the genuine one.
+        replay_valid = session_valid and self.session_manager.is_sequence_fresh(packet.sequence_number)
 
-        # Layer 3: Classical Hash Binding Check
+        # Layer 3: Classical Hash Binding Check (constant-time compare)
         if session_valid:
             expected_hash = compute_message_hash(
                 packet.message,
@@ -104,27 +107,37 @@ class Bob:
                 session.challenge,
                 packet.sequence_number
             )
-            classical_hash_valid = (packet.message_hash == expected_hash)
+            classical_hash_valid = hmac.compare_digest(str(packet.message_hash), expected_hash)
         else:
             classical_hash_valid = False
 
-        # Layer 3.5: Verify Canonical ML-DSA Transcript
-        ml_dsa_valid = True  # Default true if ML-DSA not enforced
-        if packet.ml_dsa_signature and self.trusted_classical_pub_key and packet.qds_signature:
-            canonical_transcript = (
-                f"{packet.session_id}||{packet.sequence_number}||{packet.message_hash}||"
-                f"{getattr(packet.qds_signature, 'correction_bits', '')[:32]}||"
-                f"n_positions={getattr(packet.qds_signature, 'n_positions', 32)}"
-            )
-            try:
-                from cryptography.hazmat.primitives.asymmetric import mldsa
-                pub_key = mldsa.MLDSA65PublicKey.from_public_bytes(
-                    bytes.fromhex(self.trusted_classical_pub_key)
-                )
-                pub_key.verify(bytes.fromhex(packet.ml_dsa_signature), canonical_transcript.encode("utf-8"))
-                ml_dsa_valid = True
-            except Exception:
-                ml_dsa_valid = False
+        # Signature must be bound to this exact packet's session and slot
+        sig = packet.qds_signature
+        if sig is not None and (getattr(sig, "session_id", None) != packet.session_id
+                                or getattr(sig, "sequence_number", None) != packet.sequence_number):
+            classical_hash_valid = False
+
+        # Layer 3.5: ML-DSA over the full canonical transcript.
+        # When Bob holds Alice's ML-DSA key the tag is REQUIRED: a missing or
+        # malformed tag is a failure, never a pass.
+        if self.trusted_classical_pub_key:
+            ml_dsa_valid = False
+            if packet.ml_dsa_signature and sig is not None:
+                try:
+                    from cryptography.hazmat.primitives.asymmetric import mldsa
+                    transcript = canonical_transcript(
+                        packet.session_id, packet.sequence_number, packet.message_hash,
+                        sig.revealed_keys, sig.message_bits, sig.n_positions, sig.fingerprint_qubits,
+                    )
+                    pub_key = mldsa.MLDSA65PublicKey.from_public_bytes(
+                        bytes.fromhex(self.trusted_classical_pub_key)
+                    )
+                    pub_key.verify(bytes.fromhex(packet.ml_dsa_signature), transcript)
+                    ml_dsa_valid = True
+                except Exception:
+                    ml_dsa_valid = False
+        else:
+            ml_dsa_valid = True  # no ML-DSA key configured for this verifier
 
         # Layer 4: GC QDS SWAP Test Verification
         qds_mismatch_rate = 1.0
@@ -243,6 +256,8 @@ class Bob:
             defense_status = DefenseStatus.DETECTED
 
         is_accepted = threat_score.is_accepted
+        if is_accepted:
+            self.session_manager.verify_sequence_number(packet.sequence_number)
 
         return AttackResult(
             attack_id=f"chk_{packet.sequence_number}_{packet.session_id[:8]}",

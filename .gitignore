@@ -9,3 +9,6 @@ venv/
 redteam/secrets/
 # browser screenshots
 .playwright-mcp/
+# red-team generated output
+redteam/results/
+redteam/captures/

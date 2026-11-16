@@ -19,13 +19,15 @@ def test_scenario_3_forgery_attempt():
     sim = AttackSimulator(32)
     res = sim.run_attack(AttackType.FORGERY_ATTEMPT, "t")
     assert res.detected
-    assert res.detection_layer in ["CORRECTION_BITS", "ML_DSA_VERIFICATION", "QDS_VERIFICATION"]
+    # Now caught at the session-binding check (CLASSICAL_HASH) before any quantum test runs.
+    assert res.detection_layer in ["CLASSICAL_HASH", "CORRECTION_BITS", "ML_DSA_VERIFICATION", "QDS_VERIFICATION"]
 
 def test_scenario_4_impersonation():
     sim = AttackSimulator(32)
     res = sim.run_attack(AttackType.IMPERSONATION, "t")
     assert res.detected
-    assert res.detection_layer in ["CORRECTION_BITS", "ML_DSA_VERIFICATION", "QDS_VERIFICATION"]
+    # Now caught at the session-binding check (CLASSICAL_HASH) before any quantum test runs.
+    assert res.detection_layer in ["CLASSICAL_HASH", "CORRECTION_BITS", "ML_DSA_VERIFICATION", "QDS_VERIFICATION"]
 
 def test_scenario_5_intercept_resend():
     sim = AttackSimulator(32)
@@ -51,7 +53,8 @@ def test_scenario_8_cross_session():
     assert res.detected
     # Because cross-session reuse means Alice uses a different QPKD auth context,
     # the QDS verification will fail.
-    assert res.detection_layer in ["CORRECTION_BITS", "ML_DSA_VERIFICATION", "QDS_VERIFICATION"]
+    # Now caught at the session-binding check (CLASSICAL_HASH) before any quantum test runs.
+    assert res.detection_layer in ["CLASSICAL_HASH", "CORRECTION_BITS", "ML_DSA_VERIFICATION", "QDS_VERIFICATION"]
 
 def test_scenario_9_compromised_context():
     sim = AttackSimulator(32)

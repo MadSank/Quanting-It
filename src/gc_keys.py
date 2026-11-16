@@ -165,6 +165,9 @@ class GCKeyPair:
     # Copy budget tracking for each (position, bit) pair
     copy_budgets: dict[tuple[int, int], CopyBudget] = field(default_factory=dict)
 
+    # One-time use: set once a signature has revealed keys from this pair
+    used: bool = False
+
     def __post_init__(self):
         if not self.copy_budgets:
             for pk in self.private_keys:

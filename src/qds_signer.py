@@ -88,7 +88,15 @@ class GCSigner:
     """
 
     @staticmethod
-    def encode_message(message: bytes, n_positions: int) -> list[int]:
+    def binding_context(session_id: str, sequence_number: int) -> bytes:
+        """Session binding mixed into the signed bits (empty when unbound)."""
+        if not session_id:
+            return b""
+        from src.crypto import encode_fields
+        return encode_fields(b"quatinit/gc/binding/1", [session_id, int(sequence_number)])
+
+    @staticmethod
+    def encode_message(message: bytes, n_positions: int, context: bytes = b"") -> list[int]:
         """
         Encode a message into M bits for signing.
 
@@ -107,7 +115,12 @@ class GCSigner:
         Returns:
             List of M bits (0 or 1).
         """
-        h = hashlib.sha256(message).digest()
+        if context:
+            # Bound form: the bits depend on the session and sequence number,
+            # so a signature cannot be replayed into another session or slot.
+            h = hashlib.sha256(b"quatinit/gc/bits/1" + len(context).to_bytes(4, "big") + context + message).digest()
+        else:
+            h = hashlib.sha256(message).digest()
         # Extract M bits from the hash
         bits = []
         for byte_val in h:
@@ -149,7 +162,14 @@ class GCSigner:
         Returns:
             GCSignature containing the revealed private keys.
         """
-        message_bits = GCSigner.encode_message(message, key_pair.n_positions)
+        if getattr(key_pair, "used", False):
+            raise RuntimeError(
+                "GC key pair already used to sign. Gottesman-Chuang keys are one-time: "
+                "a second signature would reveal both keys at some positions."
+            )
+        context = GCSigner.binding_context(session_id, sequence_number)
+        message_bits = GCSigner.encode_message(message, key_pair.n_positions, context)
+        key_pair.used = True
 
         revealed_keys = []
         for i in range(key_pair.n_positions):

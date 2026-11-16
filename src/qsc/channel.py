@@ -338,6 +338,24 @@ VERSIONS: dict[str, ChannelConfig | None] = {
         description="First draft: BB84 key (Python RNG, unauthenticated classical channel, "
                     "no privacy amplification) -> AES-256-GCM; falls back to X25519 if QKD aborts.",
     ),
+    "v2": ChannelConfig(
+        name="v2",
+        qkd=QKDConfig(n_pulses=250000, rng="system", authenticate=True, decoy=True,
+                      privacy_amplification="decoy", finite_size=True),
+        kem=("mlkem768", "x25519"),
+        fallback="none",
+        identity_auth=True,
+        key_confirmation=True,
+        replay_protection=True,
+        pad_to=64,
+        ratchet=True,
+        sign_messages=True,
+        min_secrets=2,
+        description="Hardened: every handshake message ML-DSA-signed with pinned keys; decoy-state "
+                    "BB84 with finite-size privacy amplification; ML-KEM-768 + X25519 + QKD combined "
+                    "by HKDF-SHA3; no classical-only fallback; key confirmation; per-message ratchet; "
+                    "replay rejection; length padding; ML-DSA on every data packet.",
+    ),
 }
 
 
