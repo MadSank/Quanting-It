@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quatinit, preview G: Riso</title>
+<meta name="description" content="Pass a note nobody else can read. Seal it for real in your browser and see what Bob and Eve each get. Design preview G.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://api.fontshare.com/v2/css?f[]=cabinet-grotesk@800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Literata:opsz,wght@7..72,400;7..72,500&display=swap" rel="stylesheet">
+<style>
+/* Hallmark · theme: riso (picked for a hands-on, printed feel) · genre: playful · job: try · hero: split, the note on the right · nav: wordmark and one link · footer: one line · signature: a note you write and seal with real AES-256-GCM, flipped between Bob's copy and Eve's · mode: fast preview */
+/* Hallmark · pre-emit critique: P4 H5 E4 S5 R4 V4 · weakest: E, the sealing is real but the key exchange behind it is described, not run */
+/* Hallmark · waive 38iii · riso names the misregistered word as its signature, used once in the hero · it is the theme's print mark, not emphasis */
+:root {
+  --color-paper: oklch(97% 0.011 90); --color-paper-2: oklch(93.5% 0.034 356); --color-paper-3: oklch(84% 0.11 356);
+  --color-ink: oklch(40% 0.165 265); --color-ink-2: oklch(45% 0.15 265); --color-muted: oklch(50% 0.115 265);
+  --color-rule: oklch(85% 0.045 265);
+  --color-accent: oklch(68% 0.235 356); --color-accent-ink: oklch(27% 0.13 265); --color-focus: oklch(44% 0.2 265);
+  --color-cross: oklch(48% 0.19 310);
+  --font-display: "Cabinet Grotesk", ui-sans-serif, sans-serif; --font-body: "Literata", ui-serif, Georgia, serif; --font-mono: ui-monospace, monospace;
+  --radius-card: 2px; --texture-opacity: 0.08;
+  --text-sm: 0.875rem; --text-base: 1.0625rem; --text-lg: 1.25rem; --text-title: 1.75rem; --text-display-s: 2.6rem; --text-display: clamp(2.8rem, 5.6vw, 5rem);
+  --container: 1200px; --gutter: clamp(16px, 4vw, 48px);
+}
+*, *::before, *::after { box-sizing: border-box; }
+html, body { overflow-x: clip; }
+html { scrollbar-color: var(--color-paper-3) var(--color-paper); }
+body { margin: 0; background: var(--color-paper); color: var(--color-ink-2); font-family: var(--font-body); font-size: var(--text-base); line-height: 1.6; caret-color: var(--color-accent); }
+::selection { background: var(--color-accent); color: var(--color-paper); }
+h1, h2, h3 { font-family: var(--font-display); font-weight: 800; color: var(--color-ink); letter-spacing: -0.025em; line-height: 0.98; margin: 0; overflow-wrap: break-word; min-width: 0; text-wrap: balance; }
+p { margin: 0; text-wrap: pretty; }
+a { color: var(--color-ink); text-underline-offset: 0.18em; }
+:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 3px; transition: none; }
+.wrap { max-width: var(--container); margin: 0 auto; padding: 0 var(--gutter); }
+.mis { color: var(--color-accent); position: relative; }
+.mis::after { content: attr(data-w); position: absolute; left: 1.5px; top: 1px; color: var(--color-ink); mix-blend-mode: multiply; opacity: .3; }
+
+.nav .wrap { display: flex; justify-content: space-between; align-items: baseline; padding-top: 24px; padding-bottom: 24px; }
+.nav .name { font-family: var(--font-display); font-weight: 800; font-size: var(--text-lg); color: var(--color-ink); text-decoration: none; }
+
+.hero .wrap { display: grid; grid-template-columns: minmax(0, 6fr) minmax(0, 6fr); gap: 56px; align-items: center; min-height: min(720px, calc(100dvh - 84px)); padding-bottom: 56px; }
+.hero h1 { font-size: var(--text-display); }
+.hero .lede { margin-top: 20px; font-size: var(--text-lg); max-width: 32ch; }
+.btn { font: inherit; font-family: var(--font-display); font-weight: 800; font-size: var(--text-lg); border-radius: var(--radius-card); padding: 12px 24px; cursor: pointer; border: 2px solid var(--color-ink); background: var(--color-ink); color: var(--color-paper); transition: transform 120ms ease-out; }
+.btn:hover { background: var(--color-cross); border-color: var(--color-cross); }
+.btn:active { transform: translate(2px, 2px); }
+.ghost { background: transparent; color: var(--color-ink); }
+.ghost:hover { background: var(--color-paper-2); color: var(--color-ink); border-color: var(--color-ink); }
+.hero .actions { margin-top: 28px; display: flex; gap: 12px; flex-wrap: wrap; }
+
+.note { position: relative; background: var(--color-paper-2); padding: 28px; border-radius: var(--radius-card); transform: rotate(-1.2deg); }
+.note::before { content: ""; position: absolute; inset: 8px -8px -8px 8px; background: var(--color-paper-3); z-index: -1; border-radius: var(--radius-card); }
+.note label { font-family: var(--font-display); font-weight: 800; font-size: var(--text-lg); color: var(--color-ink); display: block; }
+.note textarea { width: 100%; margin-top: 12px; font: inherit; font-size: var(--text-lg); color: var(--color-ink); background: var(--color-paper); border: 2px solid var(--color-ink); border-radius: var(--radius-card); padding: 12px 16px; min-height: 5.5em; resize: vertical; }
+.note textarea:hover { border-color: var(--color-cross); }
+.flip { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 16px; border: 2px solid var(--color-ink); border-radius: var(--radius-card); }
+.flip button { font: inherit; font-family: var(--font-display); font-weight: 800; background: transparent; color: var(--color-ink); border: 0; padding: 8px; cursor: pointer; }
+.flip button + button { border-left: 2px solid var(--color-ink); }
+.flip button[aria-pressed="true"] { background: var(--color-accent); color: var(--color-accent-ink); }
+.out { margin-top: 12px; min-height: 5.5em; padding: 12px 16px; background: var(--color-paper); border: 2px dashed var(--color-ink); border-radius: var(--radius-card); overflow-wrap: anywhere; font-size: var(--text-base); }
+.out.eve { color: var(--color-accent); font-family: var(--font-mono); font-size: var(--text-sm); }
+.note .meta { margin-top: 8px; font-size: var(--text-sm); color: var(--color-muted); min-height: 1lh; }
+
+section.band { padding: 96px 0; }
+section.pink { background: var(--color-paper-2); }
+.band h2 { font-size: var(--text-display-s); max-width: 16ch; }
+.cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; margin-top: 40px; }
+.card { border: 2px solid var(--color-ink); border-radius: var(--radius-card); background: var(--color-paper); padding: 24px; display: grid; gap: 12px; align-content: start; cursor: pointer; text-align: left; font: inherit; color: inherit; }
+.card:hover { background: var(--color-paper-3); }
+.card:active { transform: translate(2px, 2px); }
+.card .big { font-family: var(--font-display); font-weight: 800; font-size: var(--text-display-s); color: var(--color-accent); line-height: 1; }
+.card h3 { font-size: var(--text-title); }
+.card .more { color: var(--color-ink-2); }
+.card[aria-expanded="false"] .more { display: none; }
+.card .hint { font-size: var(--text-sm); color: var(--color-muted); }
+footer { padding: 24px 0 40px; font-size: var(--text-sm); color: var(--color-muted); }
+footer .wrap { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; border-top: 2px solid var(--color-ink); padding-top: 20px; }
+@media (max-width: 900px) { .hero .wrap, .cards { grid-template-columns: minmax(0, 1fr); } .note { transform: none; } }
+@media (prefers-reduced-motion: reduce) { .btn { transition: none; } }
+</style>
+</head>
+<body>
+<header class="nav"><div class="wrap"><a class="name" href="#top">Quatinit</a><a href="https://github.com/MadSank/Quanting-It">Source</a></div></header>
+<main id="top">
+  <section class="hero" aria-labelledby="h1">
+    <div class="wrap">
+      <div>
+        <h1 id="h1">Pass a note nobody else can <span class="mis" data-w="read">read</span>.</h1>
+        <p class="lede">Write it here. It gets sealed for real, right in your browser.</p>
+        <div class="actions"><button class="btn" id="seal">Seal my note</button><a class="btn ghost" href="#how">How it stays safe</a></div>
+      </div>
+      <div class="note">
+        <label for="msg">Your note</label>
+        <textarea id="msg" maxlength="200">Meet me at the north gate at nine. Bring the blue folder.</textarea>
+        <div class="flip" role="group" aria-label="Whose copy">
+          <button aria-pressed="true" data-v="bob">Bob gets</button>
+          <button aria-pressed="false" data-v="eve">Eve gets</button>
+        </div>
+        <div class="out" id="out" aria-live="polite">Seal the note to see both copies.</div>
+        <p class="meta" id="meta"></p>
+      </div>
+    </div>
+  </section>
+
+  <section class="band pink" id="how" aria-labelledby="h2a">
+    <div class="wrap">
+      <h2 id="h2a">Three tricks, all at once</h2>
+      <div class="cards">
+        <button class="card" aria-expanded="false"><span class="big">1</span><h3>Light that tells on spies</h3><span class="hint">Tap to open</span><span class="more">Alice and Bob make a key from single photons. Peeking at one changes it, and Bob sees the mess.</span></button>
+        <button class="card" aria-expanded="false"><span class="big">2</span><h3>Maths a quantum computer can’t crack</h3><span class="hint">Tap to open</span><span class="more">ML-KEM-768 adds a second key built on lattices. Shor’s algorithm does nothing to it.</span></button>
+        <button class="card" aria-expanded="false"><span class="big">3</span><h3>A signature you can’t fake</h3><span class="hint">Tap to open</span><span class="more">Alice reveals one-time keys that Bob checks against quantum copies only she could have made.</span></button>
+      </div>
+    </div>
+  </section>
+</main>
+<footer><div class="wrap"><span>Quatinit, a research prototype running in simulation.</span><a href="https://github.com/MadSank/Quanting-It">github.com/MadSank/Quanting-It</a></div></footer>
+<script>
+(() => {
+  const $ = (s) => document.querySelector(s);
+  let view = 'bob', sealed = null;
+  const hex = (u) => Array.from(u, (b) => b.toString(16).padStart(2, '0')).join('');
+  async function seal() {
+    const key = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
+    const iv = crypto.getRandomValues(new Uint8Array(12)), pt = new TextEncoder().encode($('#msg').value);
+    const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, pt));
+    const back = new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct));
+    sealed = { ct: hex(ct), back, n: ct.length }; render();
+  }
+  function render() {
+    const o = $('#out');
+    if (!sealed) return;
+    o.className = 'out' + (view === 'eve' ? ' eve' : '');
+    o.textContent = view === 'eve' ? sealed.ct : sealed.back;
+    $('#meta').textContent = view === 'eve' ? `${sealed.n} bytes of AES-256-GCM. Without the key, that is all there is.` : 'Opened with the shared key and checked for tampering.';
+  }
+  $('#seal').addEventListener('click', () => { seal(); $('.note').scrollIntoView({ block: 'nearest' }); });
+  $('#msg').addEventListener('input', () => { sealed = null; $('#out').className = 'out'; $('#out').textContent = 'Changed. Seal it again.'; $('#meta').textContent = ''; });
+  document.querySelectorAll('[data-v]').forEach((b) => b.addEventListener('click', () => { view = b.dataset.v; document.querySelectorAll('[data-v]').forEach((x) => x.setAttribute('aria-pressed', x === b)); if (!sealed) seal(); else render(); }));
+  document.querySelectorAll('.card').forEach((c) => c.addEventListener('click', () => { const open = c.getAttribute('aria-expanded') === 'true'; c.setAttribute('aria-expanded', !open); c.querySelector('.hint').textContent = open ? 'Tap to open' : 'Tap to close'; }));
+})();
+</script>
+</body>
+</html>

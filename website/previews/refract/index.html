@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quatinit, preview B: Refract</title>
+<meta name="description" content="Quatinit: measure a photon and see why quantum keys reveal eavesdroppers. Design preview B.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Funnel+Display:wght@300;400&family=Funnel+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* Hallmark · theme: refract (dealt 3/3, seed interactive-quatinit-quantum-safe-cryptography-6b12) · refract: glass/pool · genre: atmospheric · job: try · hero: stage, the polariser panel on the lit side · nav: floating pill, wordmark and one action · footer: one line · signature: you choose a measuring basis and watch a photon answer or scramble · mode: fast preview */
+/* Hallmark · pre-emit critique: P4 H4 E5 S4 R4 V5 · weakest: H, the hero object is a control panel rather than a picture; it is the product's one idea, so it stays */
+:root {
+  --color-paper: oklch(98.2% 0.006 95); --color-paper-2: oklch(96.4% 0.006 95); --color-paper-3: oklch(93.6% 0.008 95);
+  --color-ink: oklch(23% 0.035 245); --color-ink-2: oklch(36% 0.035 245); --color-muted: oklch(50% 0.025 240);
+  --color-rule: oklch(89.5% 0.008 230);
+  --color-accent: oklch(50% 0.12 234); --color-accent-hi: oklch(44% 0.12 236); --color-accent-ink: oklch(99% 0.003 95); --color-accent-soft: oklch(94% 0.025 220); --color-focus: oklch(56% 0.14 234);
+  --color-shade: oklch(86% 0.05 212); --color-light: oklch(99.7% 0.004 95); --color-glass: oklch(100% 0 0 / 0.8);
+  --spec-1: oklch(78% 0.15 32); --spec-2: oklch(90% 0.15 105); --spec-3: oklch(82% 0.13 175); --spec-4: oklch(66% 0.15 270);
+  --shadow-press: 0 2px 6px -2px oklch(40% 0.05 230 / 0.2);
+  --edge-light: inset 0 1px 0 oklch(100% 0 0 / 0.9), inset 0 0 0 1px oklch(100% 0 0 / 0.55);
+  --shadow-card: 18px 28px 48px -26px oklch(52% 0.09 220 / 0.38), 2px 3px 6px -2px oklch(40% 0.05 230 / 0.12);
+  --font-display: "Funnel Display", ui-sans-serif, system-ui, sans-serif; --font-body: "Funnel Sans", ui-sans-serif, system-ui, sans-serif;
+  --radius-card: 22px; --radius-inner: 12px; --radius-pill: 999px;
+  --tracking-display: -0.032em;
+  --text-sm: 0.875rem; --text-base: 1.0625rem; --text-lg: 1.25rem; --text-title: 1.75rem; --text-display-s: 2.6rem; --text-display: clamp(2.6rem, 5vw, 4.4rem);
+  --dur-micro: 160ms; --ease: cubic-bezier(.2, .7, .2, 1); --container: 1200px; --gutter: clamp(16px, 4vw, 48px);
+}
+*, *::before, *::after { box-sizing: border-box; }
+html, body { overflow-x: clip; }
+html { scrollbar-color: var(--color-shade) var(--color-paper); }
+body { margin: 0; background: var(--color-paper); color: var(--color-ink-2); font-family: var(--font-body); font-size: var(--text-base); line-height: 1.6; font-variant-numeric: tabular-nums; caret-color: var(--color-accent); }
+::selection { background: var(--color-accent-soft); color: var(--color-ink); }
+h1, h2, h3 { font-family: var(--font-display); font-weight: 400; color: var(--color-ink); letter-spacing: var(--tracking-display); text-wrap: balance; line-height: 1.04; margin: 0; overflow-wrap: break-word; min-width: 0; }
+p { margin: 0; text-wrap: pretty; }
+a { color: var(--color-accent); text-underline-offset: 0.2em; }
+:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 3px; transition: none; }
+.wrap { max-width: var(--container); margin: 0 auto; padding: 0 var(--gutter); }
+
+.nav { position: absolute; top: 18px; left: 0; right: 0; z-index: 3; }
+.nav .pill { display: flex; align-items: center; gap: 24px; background: var(--color-glass); box-shadow: var(--edge-light), var(--shadow-card); border-radius: var(--radius-pill); padding: 8px 8px 8px 20px; max-width: 560px; }
+.nav .name { font-weight: 500; color: var(--color-ink); text-decoration: none; }
+.nav ul { display: flex; gap: 16px; list-style: none; margin: 0 0 0 auto; padding: 0; font-size: var(--text-sm); }
+.nav ul a { color: var(--color-ink-2); text-decoration: none; }
+.nav ul a:hover { color: var(--color-accent); }
+
+.btn { font: inherit; font-size: var(--text-sm); font-weight: 500; border-radius: var(--radius-pill); padding: 12px 20px; cursor: pointer; border: 0;
+  background: var(--color-light); color: var(--color-ink); box-shadow: var(--edge-light), var(--shadow-card); transition: transform var(--dur-micro) var(--ease), background-color var(--dur-micro) var(--ease); text-decoration: none; display: inline-block; }
+.btn:hover { transform: translateY(-1px); }
+.btn:active { transform: translateY(1px); }
+.btn--primary { background: var(--color-accent); color: var(--color-accent-ink); }
+.btn--primary:hover { background: var(--color-accent-hi); }
+.btn:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+
+.hero { position: relative; min-height: min(820px, 100dvh); display: grid; }
+.light { position: absolute; inset: 0 0 0 42%; overflow: hidden; border-bottom-left-radius: var(--radius-card); background: var(--color-shade); }
+.light canvas { width: 100%; height: 100%; display: block; }
+.hero .wrap { position: relative; display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 56px; align-items: center; padding-top: 112px; padding-bottom: 64px; width: 100%; }
+.hero h1 { font-size: var(--text-display); }
+.hero .lede { margin-top: 16px; max-width: 30ch; font-size: var(--text-lg); color: var(--color-muted); }
+.hero .actions { margin-top: 32px; display: flex; gap: 12px; flex-wrap: wrap; }
+
+.panel { background: var(--color-glass); box-shadow: var(--edge-light), var(--shadow-card); border-radius: var(--radius-card); padding: 28px; max-width: 440px; justify-self: center; width: 100%; }
+.panel h2 { font-size: var(--text-title); }
+.panel .sub { color: var(--color-muted); font-size: var(--text-sm); margin-top: 4px; }
+.seg { display: inline-flex; background: var(--color-paper-3); border-radius: var(--radius-pill); padding: 4px; margin-top: 16px; gap: 4px; }
+.seg button { font: inherit; font-size: var(--text-sm); border: 0; background: transparent; color: var(--color-ink-2); border-radius: var(--radius-pill); padding: 8px 16px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--color-light); color: var(--color-ink); box-shadow: var(--edge-light), var(--shadow-press); }
+.dial { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 20px; }
+.dial figure { margin: 0; background: var(--color-paper-2); border-radius: var(--radius-inner); padding: 16px; text-align: center; }
+.dial svg { width: 64px; height: 64px; display: block; margin: 0 auto 8px; }
+.dial svg line { stroke: var(--color-accent); stroke-width: 4; stroke-linecap: round; transition: transform 400ms var(--ease); transform-origin: 32px 32px; }
+.dial svg circle { fill: none; stroke: var(--color-rule); stroke-width: 1.5; }
+.dial figcaption { font-size: var(--text-sm); color: var(--color-muted); }
+.dial b { display: block; font-family: var(--font-display); font-weight: 300; font-size: var(--text-title); color: var(--color-ink); }
+.result { margin-top: 16px; font-size: var(--text-sm); min-height: 3.2em; color: var(--color-ink-2); }
+.result.miss b { color: var(--color-accent-hi); }
+.panel .row { display: flex; gap: 8px; margin-top: 16px; }
+
+section.band { padding: 96px 0; }
+section.band.tint { background: var(--color-paper-2); }
+.head { display: flex; justify-content: space-between; align-items: end; gap: 24px; flex-wrap: wrap; margin-bottom: 36px; }
+.head h2 { font-size: var(--text-display-s); }
+.head p { color: var(--color-muted); margin-top: 8px; max-width: 46ch; }
+.chart { background: var(--color-light); border-radius: var(--radius-card); box-shadow: var(--edge-light), var(--shadow-card); padding: 28px; }
+.bars { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 8px; align-items: end; height: 240px; position: relative; border-bottom: 1px solid var(--color-rule); }
+.bars span { background: var(--color-shade); border-radius: 8px 8px 2px 2px; height: 100%; transform-origin: bottom; transition: transform 500ms var(--ease); }
+.bars span.hot { background: var(--color-accent); }
+.limit { position: absolute; left: 0; right: 0; border-top: 1.5px dashed var(--color-accent-hi); bottom: 44%; }
+.limit em { position: absolute; right: 0; top: -1.6em; font-style: normal; font-size: var(--text-sm); color: var(--color-accent-hi); }
+.chart-foot { display: flex; justify-content: space-between; margin-top: 12px; font-size: var(--text-sm); color: var(--color-muted); }
+.layers { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
+.layer { border-top: 1px solid var(--color-rule); padding-top: 16px; }
+.layer h3 { font-size: var(--text-title); }
+.layer p { margin-top: 8px; color: var(--color-muted); }
+footer { padding: 32px 0 48px; font-size: var(--text-sm); color: var(--color-muted); }
+footer .wrap { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; border-top: 1px solid var(--color-rule); padding-top: 24px; }
+
+@media (max-width: 900px) {
+  .light { inset: auto 0 0 0; height: 58%; border-radius: var(--radius-card) var(--radius-card) 0 0; }
+  .hero .wrap { grid-template-columns: minmax(0, 1fr); gap: 32px; }
+  .layers { grid-template-columns: minmax(0, 1fr); }
+  .nav ul { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .btn, .dial svg line, .bars span { transition: none; } }
+</style>
+</head>
+<body>
+<header class="nav"><div class="wrap"><nav class="pill" aria-label="Main">
+  <a class="name" href="#top">Quatinit</a>
+  <ul><li><a href="#listen">Eavesdropping</a></li><li><a href="#layers">How it works</a></li></ul>
+  <a class="btn btn--primary" href="https://github.com/MadSank/Quanting-It">Source</a>
+</nav></div></header>
+
+<main id="top">
+  <section class="hero" aria-labelledby="h1">
+    <div class="light" aria-hidden="true"><canvas id="light"></canvas></div>
+    <div class="wrap">
+      <div>
+        <h1 id="h1">Measure a photon. It changes.</h1>
+        <p class="lede">That is why a quantum key shows who tried to read it.</p>
+        <div class="actions">
+          <a class="btn btn--primary" href="#panel">Try a measurement</a>
+          <a class="btn" href="#listen">See Eve caught</a>
+        </div>
+      </div>
+
+      <div class="panel" id="panel" aria-live="polite">
+        <h2>Alice sent one photon</h2>
+        <p class="sub">Pick how Bob measures it.</p>
+        <div class="seg" role="group" aria-label="Bob’s basis">
+          <button aria-pressed="true" data-b="0">Straight</button>
+          <button aria-pressed="false" data-b="1">Diagonal</button>
+        </div>
+        <div class="dial">
+          <figure><svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="28"/><line id="aLine" x1="32" y1="8" x2="32" y2="56"/></svg><b id="aBit">?</b><figcaption>Alice’s bit</figcaption></figure>
+          <figure><svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="28"/><line id="bLine" x1="32" y1="8" x2="32" y2="56"/></svg><b id="bBit">?</b><figcaption>Bob reads</figcaption></figure>
+        </div>
+        <p class="result" id="result">Bob has not measured yet.</p>
+        <div class="row">
+          <button class="btn btn--primary" id="measure">Measure</button>
+          <button class="btn" id="next">Next photon</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band tint" id="listen" aria-labelledby="h2a">
+    <div class="wrap">
+      <div class="head">
+        <div><h2 id="h2a">Who is on the line?</h2><p>Error rate across twelve key exchanges. Bob throws a key away above 11%.</p></div>
+        <div class="seg" role="group" aria-label="Listener">
+          <button aria-pressed="true" data-eve="0">Nobody</button>
+          <button aria-pressed="false" data-eve="1">Eve measures all</button>
+        </div>
+      </div>
+      <div class="chart">
+        <div class="bars" id="bars"><div class="limit"><em>abort at 11%</em></div></div>
+        <div class="chart-foot"><span>Each bar is one simulated session</span><span id="summary"></span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="layers" aria-labelledby="h2b">
+    <div class="wrap">
+      <div class="head"><div><h2 id="h2b">Three locks on one message</h2></div></div>
+      <div class="layers">
+        <div class="layer"><h3>Photons</h3><p>BB84 builds a shared key and shows any listener.</p></div>
+        <div class="layer"><h3>Lattices</h3><p>ML-KEM-768 adds a key a quantum computer cannot break.</p></div>
+        <div class="layer"><h3>Signatures</h3><p>Quantum and ML-DSA-65 signatures prove Alice sent it.</p></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer><div class="wrap"><span>Quatinit, a research prototype running in simulation.</span><a href="https://github.com/MadSank/Quanting-It">github.com/MadSank/Quanting-It</a></div></footer>
+
+<script>
+(() => {
+  const $ = (s) => document.querySelector(s);
+  const css = getComputedStyle(document.documentElement), C = (n) => css.getPropertyValue(n).trim();
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const ang = (basis, bit) => (basis ? 45 : 0) + (bit ? 90 : 0);
+  let a, bBasis = 0, measured = false;
+  function fresh() {
+    a = { basis: Math.random() < .5 ? 0 : 1, bit: Math.random() < .5 ? 0 : 1 }; measured = false;
+    $('#aLine').style.transform = `rotate(${ang(a.basis, a.bit)}deg)`; $('#aBit').textContent = a.bit;
+    $('#bLine').style.transform = `rotate(${ang(bBasis, 0)}deg)`; $('#bBit').textContent = '?';
+    $('#result').className = 'result'; $('#result').textContent = `Alice used the ${a.basis ? 'diagonal' : 'straight'} basis. Bob has not measured yet.`;
+  }
+  document.querySelectorAll('[data-b]').forEach((b) => b.addEventListener('click', () => {
+    bBasis = +b.dataset.b; document.querySelectorAll('[data-b]').forEach((x) => x.setAttribute('aria-pressed', x === b));
+    if (!measured) $('#bLine').style.transform = `rotate(${ang(bBasis, 0)}deg)`;
+  }));
+  $('#measure').addEventListener('click', () => {
+    const same = bBasis === a.basis, bit = same ? a.bit : (Math.random() < .5 ? 0 : 1);
+    measured = true; $('#bBit').textContent = bit; $('#bLine').style.transform = `rotate(${ang(bBasis, bit)}deg)`;
+    const r = $('#result');
+    if (same) { r.className = 'result'; r.innerHTML = '<b>Same basis.</b> Bob reads Alice’s bit exactly. This bit can join the key.'; }
+    else { r.className = 'result miss'; r.innerHTML = `<b>Different basis.</b> A coin flip: Bob got ${bit}. The photon is now ${bit === a.bit ? 'right by luck' : 'wrong'}, and the original is gone.`; }
+  });
+  $('#next').addEventListener('click', fresh); fresh();
+
+  // Eavesdropping chart: each bar a simulated session of 400 sifted bits.
+  const bars = $('#bars');
+  const spans = Array.from({ length: 12 }, () => { const s = document.createElement('span'); bars.appendChild(s); return s; });
+  function session(eve) {
+    let e = 0, n = 400;
+    for (let i = 0; i < n; i++) { let err = Math.random() < 0.015; if (eve && Math.random() < .25) err = !err; if (err) e++; }
+    return e / n;
+  }
+  function run(eve) {
+    const q = spans.map(() => session(eve)), max = 0.25;
+    spans.forEach((s, i) => { s.style.transform = `scaleY(${Math.max(q[i] / max, 0.02)})`; s.className = q[i] > .11 ? 'hot' : ''; s.title = (q[i] * 100).toFixed(1) + '%'; });
+    const ab = q.filter((x) => x > .11).length, avg = q.reduce((x, y) => x + y) / q.length;
+    $('#summary').textContent = `average ${(avg * 100).toFixed(1)}%, ${ab} of 12 aborted`;
+  }
+  document.querySelectorAll('[data-eve]').forEach((b) => b.addEventListener('click', () => {
+    document.querySelectorAll('[data-eve]').forEach((x) => x.setAttribute('aria-pressed', x === b)); run(b.dataset.eve === '1');
+  }));
+  run(false);
+
+  // The light: soft caustic net drawn on a canvas.
+  const cv = $('#light'), ctx = cv.getContext('2d');
+  function size() { const r = cv.getBoundingClientRect(), d = Math.min(devicePixelRatio || 1, 2); cv.width = r.width * d; cv.height = r.height * d; ctx.setTransform(d, 0, 0, d, 0, 0); return r; }
+  let R = size(); addEventListener('resize', () => { R = size(); });
+  const spec = ['--spec-1', '--spec-2', '--spec-3', '--spec-4'].map(C), shade = C('--color-shade'), light = C('--color-light');
+  function frame(t) {
+    const w = R.width, h = R.height; ctx.fillStyle = shade; ctx.fillRect(0, 0, w, h);
+    ctx.globalCompositeOperation = 'lighter';
+    for (let k = 0; k < 26; k++) {
+      ctx.beginPath(); const y0 = (k / 26) * h * 1.2 - h * .1;
+      for (let x = 0; x <= w; x += 12) {
+        const y = y0 + Math.sin(x * .012 + t * .0004 + k) * 22 + Math.sin(x * .031 - t * .0003 + k * 1.7) * 9;
+        x ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+      }
+      ctx.strokeStyle = k % 7 === 0 ? spec[k % 4] : light; ctx.globalAlpha = k % 7 === 0 ? .35 : .22; ctx.lineWidth = 2 + (k % 3); ctx.stroke();
+    }
+    ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+    if (!reduce) requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

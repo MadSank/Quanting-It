@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quatinit, Lumen variant 3: Then and now</title>
+<meta name="description" content="Your sentence through the old protocol and the new one, side by side. Lumen variant 3.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif&family=Geist:wght@400;500&family=Geist+Mono:wght@400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../_lumen/base.css">
+<style>
+/* Hallmark · theme: lumen (chosen by the user) · genre: atmospheric · job: try · hero: the sentence you type · nav: wordmark only · footer: one line · signature: the same sentence in two lanes, v0 and today, filling in row by row as you scroll · scroll: one pinned comparison · mode: fast preview */
+/* Hallmark · pre-emit critique: P4 H4 E5 S5 R4 V4 · weakest: V, two cards of text; the contrast between them is the image */
+.story { grid-template-columns: minmax(0, 4fr) minmax(0, 8fr); }
+.pair { width: 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.lane { background: var(--color-paper-2); border: 1px solid var(--color-rule-2); border-radius: var(--radius-card); padding: 20px; min-width: 0; }
+.lane h3 { font-size: var(--text-title); }
+.lane .tag { font-size: var(--text-sm); color: var(--color-muted); margin-top: 4px; }
+.row { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--color-rule); opacity: .25; transition: opacity 400ms var(--ease); }
+.row.on { opacity: 1; }
+.row span { font-size: var(--text-sm); color: var(--color-muted); display: block; }
+.row p { margin-top: 4px; color: var(--color-ink); overflow-wrap: anywhere; min-height: 1lh; }
+.row p.code { font-family: var(--font-outlier); font-size: var(--text-sm); color: var(--color-accent); }
+.row p.bad { color: var(--color-accent-2); }
+.row p.good { color: var(--color-live); }
+.row.hot { border-top-color: var(--color-accent-2); }
+.qbar { height: 4px; background: var(--color-paper-3); margin-top: 8px; position: relative; border-radius: 2px; }
+.qbar i { position: absolute; inset: 0; background: var(--color-live); transform-origin: left; transform: scaleX(0); transition: transform 600ms var(--ease); border-radius: 2px; }
+.toggle { margin-top: 16px; display: flex; justify-self: start; gap: 8px; flex-wrap: wrap; }
+@media (max-width: 640px) { .pair { grid-template-columns: minmax(0, 1fr); } }
+@media (prefers-reduced-motion: reduce) { .row, .qbar i { transition: none; } }
+</style>
+</head>
+<body>
+<header class="nav"><div class="wrap"><a class="name" href="#top">quatinit</a><a href="https://github.com/MadSank/Quanting-It">Source</a></div></header>
+<main id="top">
+  <section class="hero" aria-labelledby="h1">
+    <div class="wrap">
+      <h1 id="h1">One sentence. Two protocols.</h1>
+      <p class="lede">Send it through v0 and through today&rsquo;s channel at once, and compare.</p>
+      <form class="compose" id="compose">
+        <label class="vh" for="text">Your sentence</label>
+        <input id="text" maxlength="60" value="meet me at the north gate at nine" autocomplete="off">
+        <button class="btn" type="submit">Send both</button>
+      </form>
+    </div>
+  </section>
+
+  <section class="wrap story" id="story" aria-label="Your sentence in two protocols">
+    <div>
+      <article class="step" data-s="0"><h2>both sign it</h2><p>Each lane signs with the same quantum one-time keys, picked by the hash.</p></article>
+      <article class="step" data-s="1"><h2>only one makes a key</h2><p>Today, photons build a key first. v0 skips this.</p></article>
+      <article class="step" data-s="2"><h2>on the wire</h2><p>What actually travels between Alice and Bob.</p>
+        <div class="toggle" role="group" aria-label="Listener"><button class="choice" data-e="1" aria-pressed="true">Eve listening</button><button class="choice" data-e="0" aria-pressed="false">nobody</button></div></article>
+      <article class="step" data-s="3"><h2>what eve keeps</h2><p>Same tap, same sentence, very different haul.</p></article>
+      <article class="step" data-s="4"><h2>what bob reads</h2><p>Both lanes deliver. Only one kept it between two people.</p></article>
+    </div>
+    <div class="stage">
+      <div class="pair" aria-live="polite">
+        <div class="lane"><h3>v0</h3><p class="tag">signed, sent as is</p>
+          <div class="row" data-r="0"><span>signature bits</span><p class="code" id="a0"></p></div>
+          <div class="row" data-r="1"><span>shared key</span><p id="a1">none</p></div>
+          <div class="row" data-r="2"><span>on the wire</span><p id="a2"></p></div>
+          <div class="row" data-r="3" id="a3r"><span>Eve keeps</span><p id="a3"></p></div>
+          <div class="row" data-r="4"><span>Bob reads</span><p class="good" id="a4"></p></div>
+        </div>
+        <div class="lane"><h3>today</h3><p class="tag">photon key, AES-256-GCM</p>
+          <div class="row" data-r="0"><span>signature bits</span><p class="code" id="b0"></p></div>
+          <div class="row" data-r="1"><span>shared key</span><p id="b1"></p><div class="qbar" aria-hidden="true"><i id="bq"></i></div></div>
+          <div class="row" data-r="2"><span>on the wire</span><p class="code" id="b2"></p></div>
+          <div class="row" data-r="3"><span>Eve keeps</span><p id="b3"></p></div>
+          <div class="row" data-r="4"><span>Bob reads</span><p class="good" id="b4"></p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+<footer><div class="wrap"><span>Quatinit, a research prototype running in simulation.</span><a href="https://github.com/MadSank/Quanting-It">github.com/MadSank/Quanting-It</a></div></footer>
+<script type="module">
+import { sha256Bits, seal, onStep, bb84, reduced } from '../_lumen/story.js';
+const $ = (s) => document.querySelector(s);
+const text = () => $('#text').value.trim() || 'meet me at the north gate at nine';
+let eve = 1, step = 0, ct = '', bits = '', key = null;
+async function refresh() {
+  bits = await sha256Bits(text()); ct = await seal(text());
+  key = bb84(400, 0); // today's key is agreed on a clean pass; a tapped pass aborts first (see variant 2)
+  fill();
+}
+function fill() {
+  $('#a0').textContent = $('#b0').textContent = bits;
+  $('#b1').textContent = `${key.sifted} kept bits, ${(key.qber * 100).toFixed(1)}% errors`;
+  $('#bq').style.transform = `scaleX(${step >= 1 ? Math.min(1, key.sifted / 220) : 0})`;
+  $('#a2').textContent = text(); $('#b2').textContent = ct;
+  const a3 = $('#a3'), b3 = $('#b3');
+  a3.textContent = eve ? text() : 'nothing, nobody listening'; a3.className = eve ? 'bad' : '';
+  $('#a3r').classList.toggle('hot', !!eve && step >= 3);
+  b3.textContent = eve ? `${ct.length / 2} bytes of noise` : 'nothing, nobody listening';
+  $('#a4').textContent = $('#b4').textContent = text();
+  document.querySelectorAll('.row').forEach((r) => r.classList.toggle('on', +r.dataset.r <= step));
+}
+document.querySelectorAll('[data-e]').forEach((x) => x.addEventListener('click', () => { eve = +x.dataset.e; document.querySelectorAll('[data-e]').forEach((y) => y.setAttribute('aria-pressed', y === x)); fill(); }));
+$('#text').addEventListener('input', refresh);
+$('#compose').addEventListener('submit', (e) => { e.preventDefault(); $('#story').scrollIntoView({ behavior: reduced() ? 'auto' : 'smooth' }); });
+onStep((s) => { step = s; fill(); });
+await refresh();
+</script>
+</body>
+</html>

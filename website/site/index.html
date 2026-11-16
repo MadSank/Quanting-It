@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quatinit: send a sentence through a quantum-safe line</title>
+<meta name="description" content="Type a sentence and watch it become hash bits, photons and ciphertext on its way from Alice to Bob. Quatinit is a research prototype of quantum-safe messaging.">
+<meta name="theme-color" content="#07060d">
+<link rel="icon" href="assets/mark.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif&family=Geist:wght@400;500&family=Geist+Mono:wght@400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/base.css">
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+<a class="skip" href="#story">Skip to the story</a>
+<header class="nav">
+  <div class="wrap">
+    <a class="name" href="#top">quatinit</a>
+    <nav aria-label="Sections">
+      <ul>
+        <li><a href="#story">The journey</a></li>
+        <li><a href="#dial">Eve&rsquo;s dial</a></li>
+        <li><a href="#inside">Inside</a></li>
+        <li><a href="#arena">Arena</a></li>
+      </ul>
+    </nav>
+    <a href="https://github.com/MadSank/Quanting-It">Source</a>
+  </div>
+</header>
+
+<main id="top">
+  <section class="hero" aria-labelledby="h1">
+    <div class="wrap hero-grid">
+      <div>
+      <h1 id="h1">Type a sentence. Watch it come apart.</h1>
+      <p class="lede">Every letter becomes bits, then light, then noise only Bob can undo.</p>
+      <form class="compose" id="compose">
+        <label class="vh" for="text">Your sentence</label>
+        <input id="text" name="text" maxlength="48" value="meet me at the north gate at nine" autocomplete="off" spellcheck="false">
+        <button class="btn" type="submit">Send it</button>
+      </form>
+      <p class="hint">Your sentence never leaves this page. The hashing and encryption run in your browser.</p>
+      </div>
+      <figure class="teaser" aria-hidden="true">
+        <p class="teaser-text" id="teaser">meet me at the north gate at nine</p>
+        <figcaption><span>what Bob reads</span><span>drifting into what Eve sees</span></figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="wrap story" id="story" aria-label="Your sentence, step by step">
+    <div>
+      <article class="step" data-s="0"><h2>your words</h2><p>Plain letters. In the first version of Quatinit, this is exactly what crossed the wire.</p></article>
+      <article class="step" data-s="1"><h2>a fingerprint</h2><p>The sentence&rsquo;s SHA-256 hash, cut to 32 bits. Each bit picks which one-time key Alice reveals to sign it.</p></article>
+      <article class="step" data-s="2"><h2>light</h2><p>Photons in two bases build a shared key. Bob keeps the ones where his basis matched Alice&rsquo;s.</p></article>
+      <article class="step" data-s="3"><h2>someone looks</h2><p>Eve measures in the middle. A quarter of what she touches arrives wrong, and Bob notices.</p></article>
+      <article class="step" data-s="4"><h2>noise</h2><p>With a clean key, AES-256-GCM turns your words into this. It is all an eavesdropper keeps.</p></article>
+      <article class="step" data-s="5"><h2>your words, again</h2><p>Bob checks the signature, opens the seal and reads it.</p></article>
+    </div>
+    <div class="stage">
+      <div class="field" aria-live="polite">
+        <canvas id="cv" role="img" aria-label="Your sentence drawn as moving characters"></canvas>
+        <noscript><p class="fallback">meet me at the north gate at nine</p></noscript>
+        <div class="cap"><span id="where">alice&rsquo;s screen</span><span id="meter"></span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="dial" aria-labelledby="h2-dial">
+    <div class="wrap dial">
+      <div>
+        <h2 id="h2-dial">eve&rsquo;s dial</h2>
+        <p class="sub">How much can she read before Bob notices? Drag to find out.</p>
+        <label class="range" for="frac"><span>Photons Eve measures</span><output id="fracOut" for="frac">40%</output></label>
+        <input type="range" id="frac" min="0" max="100" step="5" value="40">
+        <button class="choice" id="rerun" type="button">Run another session</button>
+      </div>
+      <div class="readout" aria-live="polite">
+        <p class="big m" id="qber">0%</p>
+        <p class="what">errors Bob sees, over <span id="kept">0</span> kept bits</p>
+        <div class="scale" aria-hidden="true"><i id="bar"></i><s></s><em>abort at 11%</em></div>
+        <p class="verdict" id="verdict"></p>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="inside" aria-labelledby="h2-inside">
+    <div class="wrap">
+      <h2 id="h2-inside">three locks on one sentence</h2>
+      <div class="layers">
+        <article><h3>light</h3><p>BB84 builds the key from single photons, 40,000 pulses a session. Above 11% errors the key is discarded.</p><p class="m spec">qsc/bb84.py</p></article>
+        <article><h3>lattices</h3><p>ML-KEM-768 and ML-DSA-65, the NIST post-quantum standards, cover what photons cannot.</p><p class="m spec">qsc/channel.py</p></article>
+        <article><h3>one-time keys</h3><p>The signature scheme of Gottesman and Chuang: 32 positions, 128-bit keys, each checked by a destructive SWAP test.</p><p class="m spec">qds_signer.py, swap_test.py</p></article>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="arena" aria-labelledby="h2-arena">
+    <div class="wrap arena">
+      <div>
+        <h2 id="h2-arena">attack it yourself</h2>
+        <p class="sub">An arena replays each attack with messages the attacker never sees, then scores it.</p>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <caption class="vh">Judge results so far</caption>
+          <thead><tr><th scope="col">Attack</th><th scope="col">Version</th><th scope="col">Read</th><th scope="col">Forged</th></tr></thead>
+          <tbody>
+            <tr><td>Passive tap</td><td class="m">v0</td><td class="m bad">1.00</td><td class="m">0</td></tr>
+            <tr><td>Passive tap</td><td class="m">v1</td><td class="m good">0.00</td><td class="m">0</td></tr>
+            <tr><td>Active attacks</td><td class="m">v0, v1</td><td colspan="2" class="muted">next round</td></tr>
+          </tbody>
+        </table>
+        <pre class="cmd m"><span class="p">$</span> python -m redteam.judge redteam/attacks/example_passive.py --versions v0 v1</pre>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="run" aria-labelledby="h2-run">
+    <div class="wrap run">
+      <h2 id="h2-run">run it on your machine</h2>
+      <pre class="cmd m" id="cmds"><span class="p">$</span> git clone https://github.com/MadSank/Quanting-It
+<span class="p">$</span> cd Quanting-It
+<span class="p">$</span> python -m venv .venv
+<span class="p">$</span> .venv/Scripts/pip install -r requirements.txt
+<span class="p">$</span> .venv/Scripts/streamlit run app.py</pre>
+      <div class="run-foot"><button class="choice" id="copy" type="button">Copy commands</button><span>171 tests pass with <span class="m">pytest tests</span>.</span></div>
+    </div>
+  </section>
+</main>
+
+<footer><div class="wrap"><span>Quatinit is a research prototype. Everything runs in simulation, on Qiskit Aer and in your browser.</span><a href="https://github.com/MadSank/Quanting-It">github.com/MadSank/Quanting-It</a></div></footer>
+<script type="module" src="assets/main.js"></script>
+</body>
+</html>

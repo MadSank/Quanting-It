@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quatinit, preview E: Blueprint</title>
+<meta name="description" content="Build a secure channel piece by piece and see which attacks still get through. Design preview E.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600&family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+/* Hallmark · theme: blueprint (picked for a schematic you edit) · genre: modern-minimal · job: try · hero: the drawing sheet, head above the schematic · nav: title block · footer: one line · signature: a schematic of the channel where switching parts on and off changes which attacks get through · mode: fast preview */
+/* Hallmark · pre-emit critique: P4 H5 E4 S5 R4 V4 · weakest: P, verdicts come from the written threat model, not from live runs; the page says so */
+:root {
+  --color-paper: oklch(35% 0.105 256); --color-paper-2: oklch(31% 0.10 257); --color-paper-3: oklch(26.5% 0.095 258);
+  --color-ink: oklch(97% 0.012 240); --color-ink-2: oklch(90% 0.025 242); --color-muted: oklch(80% 0.045 244);
+  --color-rule: oklch(93% 0.02 240 / 0.85); --color-rule-2: oklch(93% 0.02 240 / 0.32);
+  --color-grid: oklch(97% 0.01 240 / 0.09); --color-grid-2: oklch(97% 0.01 240 / 0.2);
+  --color-accent: oklch(97% 0.012 240); --color-accent-ink: oklch(33% 0.105 256); --color-focus: oklch(97% 0.012 240);
+  --font-display: "Chakra Petch", ui-sans-serif, sans-serif; --font-body: "IBM Plex Sans", ui-sans-serif, sans-serif; --font-outlier: "IBM Plex Mono", ui-monospace, monospace;
+  --tracking-display: -0.012em;
+  --text-sm: 0.875rem; --text-base: 1rem; --text-lg: 1.125rem; --text-title: 1.5rem; --text-display-s: 2.25rem; --text-display: clamp(2.2rem, 4vw, 3.4rem);
+  --container: 1200px; --gutter: clamp(16px, 4vw, 48px);
+}
+*, *::before, *::after { box-sizing: border-box; }
+html, body { overflow-x: clip; }
+html { color-scheme: dark; scrollbar-color: var(--color-rule-2) var(--color-paper-3); }
+body { margin: 0; color: var(--color-ink-2); font-family: var(--font-body); font-size: var(--text-base); line-height: 1.6; caret-color: var(--color-ink);
+  background-color: var(--color-paper);
+  background-image: linear-gradient(var(--color-grid-2) 1px, transparent 1px), linear-gradient(90deg, var(--color-grid-2) 1px, transparent 1px),
+    linear-gradient(var(--color-grid) 1px, transparent 1px), linear-gradient(90deg, var(--color-grid) 1px, transparent 1px);
+  background-size: 120px 120px, 120px 120px, 24px 24px, 24px 24px; }
+::selection { background: var(--color-ink); color: var(--color-accent-ink); }
+h1, h2, h3 { font-family: var(--font-display); font-weight: 600; color: var(--color-ink); letter-spacing: var(--tracking-display); line-height: 1.06; margin: 0; overflow-wrap: break-word; min-width: 0; text-wrap: balance; }
+p { margin: 0; text-wrap: pretty; }
+a { color: var(--color-ink); }
+:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 3px; transition: none; }
+.wrap { max-width: var(--container); margin: 0 auto; padding: 0 var(--gutter); }
+.m { font-family: var(--font-outlier); font-weight: 500; }
+
+.tb { border-bottom: 1px solid var(--color-rule-2); }
+.tb .wrap { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: stretch; }
+.tb .wrap > * { padding: 12px 16px; border-right: 1px solid var(--color-rule-2); font-size: var(--text-sm); }
+.tb .wrap > :first-child { border-left: 1px solid var(--color-rule-2); font-family: var(--font-display); color: var(--color-ink); font-size: var(--text-base); }
+.tb a { text-decoration: none; }
+
+.hero { padding: 48px 0 64px; }
+.hero h1 { font-size: var(--text-display); max-width: 18ch; }
+.hero .lede { margin-top: 12px; max-width: 52ch; font-size: var(--text-lg); }
+.sheet { margin-top: 32px; border: 2px solid var(--color-rule); outline: 1px solid var(--color-rule-2); outline-offset: 6px; background: var(--color-paper-2); display: grid; grid-template-columns: minmax(0, 8fr) minmax(0, 4fr); }
+.draw { padding: 24px; border-right: 1px solid var(--color-rule-2); min-width: 0; }
+.draw svg { width: 100%; height: auto; display: block; }
+.draw svg .line { stroke: var(--color-ink); stroke-width: 2; fill: none; }
+.draw svg .faint { stroke: var(--color-rule-2); stroke-width: 1; fill: none; stroke-dasharray: 4 4; }
+.draw svg .box { fill: var(--color-paper-3); stroke: var(--color-ink); stroke-width: 2; }
+.draw svg .part { fill: var(--color-paper-2); stroke: var(--color-ink); stroke-width: 1.5; }
+.draw svg .part.off { stroke: var(--color-rule-2); stroke-dasharray: 4 4; }
+.draw svg text { fill: var(--color-ink); font-family: var(--font-outlier); font-size: 13px; }
+.draw svg .part.off + text { fill: var(--color-muted); }
+.draw svg .eve { fill: var(--color-paper-3); stroke: var(--color-ink); stroke-width: 2; stroke-dasharray: 2 3; }
+.parts { padding: 20px; display: grid; gap: 4px; align-content: start; }
+.parts h2 { font-size: var(--text-lg); margin-bottom: 8px; }
+.sw { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--color-rule-2); cursor: pointer; }
+.sw input { appearance: none; width: 36px; height: 20px; border: 1.5px solid var(--color-ink); margin: 0; position: relative; cursor: pointer; background: transparent; }
+.sw input::after { content: ""; position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; background: var(--color-muted); transition: transform 120ms steps(2); }
+.sw input:checked { background: var(--color-ink); }
+.sw input:checked::after { transform: translateX(16px); background: var(--color-accent-ink); }
+.sw b { display: block; color: var(--color-ink); font-weight: 500; }
+.sw small { color: var(--color-muted); font-size: var(--text-sm); }
+.verdicts { border-top: 2px solid var(--color-rule); grid-column: 1 / -1; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.vd { padding: 16px; border-right: 1px solid var(--color-rule-2); min-width: 0; }
+.vd:last-child { border-right: 0; }
+.vd h3 { font-size: var(--text-base); }
+.vd p { font-size: var(--text-sm); margin-top: 8px; color: var(--color-muted); min-height: 3lh; }
+.vd .st { display: inline-block; margin-top: 8px; font-family: var(--font-outlier); font-size: var(--text-sm); padding: 2px 8px; border: 1.5px solid var(--color-ink); }
+.vd .st.win { background: var(--color-ink); color: var(--color-accent-ink); }
+.score { padding: 12px 24px; border-top: 1px solid var(--color-rule-2); grid-column: 1 / -1; display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; font-size: var(--text-sm); }
+.presets { display: flex; gap: 8px; flex-wrap: wrap; }
+.presets button { font: inherit; font-size: var(--text-sm); background: transparent; color: var(--color-ink); border: 1.5px solid var(--color-ink); padding: 4px 12px; cursor: pointer; border-radius: 0; }
+.presets button:hover { background: var(--color-paper-3); }
+.presets button:active { transform: translateY(1px); }
+footer { padding: 24px 0 40px; font-size: var(--text-sm); color: var(--color-muted); }
+footer .wrap { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; border-top: 1px solid var(--color-rule-2); padding-top: 20px; }
+@media (max-width: 960px) {
+  .sheet { grid-template-columns: minmax(0, 1fr); }
+  .draw { border-right: 0; border-bottom: 1px solid var(--color-rule-2); }
+  .verdicts { grid-template-columns: minmax(0, 1fr); }
+  .vd { border-right: 0; border-bottom: 1px solid var(--color-rule-2); }
+  .vd p { min-height: 0; }
+}
+@media (prefers-reduced-motion: reduce) { .sw input::after { transition: none; } }
+</style>
+</head>
+<body>
+<header class="tb"><div class="wrap"><a href="#top">Quatinit</a><span>Sheet 1 of 1, the secure channel</span><a href="https://github.com/MadSank/Quanting-It">Source</a></div></header>
+<main id="top">
+  <section class="hero" aria-labelledby="h1">
+    <div class="wrap">
+      <h1 id="h1">Build the channel. Then attack it.</h1>
+      <p class="lede">Switch parts on and off. Five attacks try the line each time.</p>
+      <div class="sheet">
+        <div class="draw">
+          <svg viewBox="0 0 720 300" role="img" aria-label="Schematic of Alice, the channel parts, Eve, and Bob">
+            <line class="faint" x1="40" y1="60" x2="680" y2="60"/><line class="faint" x1="40" y1="250" x2="680" y2="250"/>
+            <rect class="box" x="20" y="120" width="96" height="64"/><text x="68" y="157" text-anchor="middle">Alice</text>
+            <rect class="box" x="604" y="120" width="96" height="64"/><text x="652" y="157" text-anchor="middle">Bob</text>
+            <line class="line" x1="116" y1="152" x2="604" y2="152"/>
+            <g id="g-enc"><rect class="part" x="150" y="128" width="96" height="48"/><text x="198" y="157" text-anchor="middle">AES-GCM</text></g>
+            <g id="g-key"><rect class="part" x="270" y="128" width="104" height="48"/><text id="t-key" x="322" y="157" text-anchor="middle">key</text></g>
+            <g id="g-auth"><rect class="part" x="398" y="128" width="88" height="48"/><text x="442" y="157" text-anchor="middle">ML-DSA</text></g>
+            <g id="g-seq"><rect class="part" x="508" y="128" width="72" height="48"/><text x="544" y="157" text-anchor="middle">seq</text></g>
+            <rect class="eve" x="300" y="216" width="120" height="48"/><text x="360" y="245" text-anchor="middle">Eve</text>
+            <line class="faint" x1="360" y1="216" x2="360" y2="176"/>
+            <text x="40" y="44">Alice to Bob, one session</text>
+            <text x="680" y="44" text-anchor="end" id="dim">0 of 5 attacks stopped</text>
+          </svg>
+        </div>
+        <div class="parts">
+          <h2>Parts</h2>
+          <label class="sw"><input type="checkbox" id="enc"><span><b>Encrypt messages</b><small>sealed and tamper-checked</small></span></label>
+          <label class="sw"><input type="checkbox" id="qkd"><span><b>BB84 photon key</b><small>shows a listener</small></span></label>
+          <label class="sw"><input type="checkbox" id="kem"><span><b>ML-KEM-768 key</b><small>lattice key, no weak fallback</small></span></label>
+          <label class="sw"><input type="checkbox" id="auth"><span><b>Sign the handshake</b><small>post-quantum, pinned keys</small></span></label>
+          <label class="sw"><input type="checkbox" id="seq"><span><b>Reject repeats</b><small>sequence numbers checked</small></span></label>
+        </div>
+        <div class="verdicts" id="verdicts" aria-live="polite"></div>
+        <div class="score"><span>Verdicts follow the written threat model; live judge runs replace them as each round is scored.</span>
+          <span class="presets"><button data-p="v0">Load v0</button><button data-p="v1">Load v1</button><button data-p="all">Everything on</button></span></div>
+      </div>
+    </div>
+  </section>
+</main>
+<footer><div class="wrap"><span>Quatinit, a research prototype running in simulation.</span><a href="https://github.com/MadSank/Quanting-It">github.com/MadSank/Quanting-It</a></div></footer>
+<script>
+(() => {
+  const $ = (s) => document.querySelector(s);
+  const on = (id) => $('#' + id).checked;
+  const ATTACKS = [
+    { name: 'Passive tap', test: () => !on('enc') ? ['Reads every message', true] : ['Sees ciphertext only', false] },
+    { name: 'Middle of the line', test: () => !on('enc') ? ['Nothing to intercept; it is all readable', true]
+        : !on('auth') ? ['Runs a separate key with each side and relays', true] : ['Signatures on the handshake give it away', false] },
+    { name: 'Record now, break later', test: () => !on('enc') ? ['No need to wait', true]
+        : (!on('qkd') && !on('kem')) ? ['A future quantum computer breaks X25519', true] : ['Photon or lattice key survives Shor', false] },
+    { name: 'Replay a packet', test: () => !on('seq') ? ['Bob accepts the same packet twice', true] : ['Second copy rejected', false] },
+    { name: 'Strip the signature', test: () => !on('auth') ? ['A missing tag is not checked', true] : ['Missing tag means reject', false] },
+  ];
+  function render() {
+    let stopped = 0;
+    $('#verdicts').innerHTML = ATTACKS.map((a) => { const [why, win] = a.test(); if (!win) stopped++;
+      return `<div class="vd"><h3>${a.name}</h3><span class="st ${win ? 'win' : ''}">${win ? 'gets through' : 'stopped'}</span><p>${why}</p></div>`; }).join('');
+    $('#dim').textContent = `${stopped} of 5 attacks stopped`;
+    [['enc', 'g-enc'], ['auth', 'g-auth'], ['seq', 'g-seq']].forEach(([i, g]) => $('#' + g + ' rect').classList.toggle('off', !on(i)));
+    const k = [on('qkd') && 'BB84', on('kem') && 'ML-KEM'].filter(Boolean);
+    $('#t-key').textContent = k.length ? k.join(' + ') : (on('enc') ? 'X25519' : 'no key');
+    $('#g-key rect').classList.toggle('off', !k.length);
+  }
+  const PRE = { v0: [], v1: ['enc', 'qkd'], all: ['enc', 'qkd', 'kem', 'auth', 'seq'] };
+  document.querySelectorAll('[data-p]').forEach((b) => b.addEventListener('click', () => { ['enc', 'qkd', 'kem', 'auth', 'seq'].forEach((i) => { $('#' + i).checked = PRE[b.dataset.p].includes(i); }); render(); }));
+  document.querySelectorAll('.sw input').forEach((i) => i.addEventListener('change', render));
+  render();
+})();
+</script>
+</body>
+</html>

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import time
 import os
+import numpy as np
 from typing import Dict, Any, Tuple, Optional, List
 from dataclasses import dataclass, field
 
@@ -989,7 +990,8 @@ def measure_e91_detailed(
     elif error_rate > (threshold * 0.7):
         status = "SUSPICIOUS"
 
-    # CHSH-analogous correlation coefficient (1.0 for perfect correlation, 0.0 for uncorrelated)
+    # Matched-basis correlation coefficient (1.0 for perfect correlation, 0.0 for uncorrelated;
+    # note: this is a 2-basis monitoring metric, distinct from the 4-setting CHSH inequality S)
     correlation_coeff = max(-1.0, min(1.0, 1.0 - 2.0 * error_rate))
 
     return {
@@ -1234,3 +1236,284 @@ def run_staged_demo_pipeline(
         "threat_score": score,
         "total_elapsed_ms": round(total_elapsed_ms, 1),
     }
+
+
+# ===========================================================================
+#  CHSH BELL-TEST EXPERIMENT & VISUALIZATION HELPERS
+# ===========================================================================
+
+def run_chsh_ui_experiment(
+    shots: int = 4096,
+    execution_mode: str = "IDEAL_SIMULATOR",
+    attack_type: str = "NONE",
+    attack_params: Optional[Dict[str, Any]] = None,
+    ibm_token: Optional[str] = None,
+    ibm_backend: Optional[str] = None,
+    confirmed_hardware: bool = False,
+    seed_simulator: Optional[int] = None,
+) -> Dict[str, Any]:
+    """
+    Executes a CHSH Bell test for the Streamlit UI, returning results and status.
+    Supports IDEAL_SIMULATOR, NOISY_SIMULATOR, and IBM_HARDWARE modes.
+    """
+    from src.chsh import run_chsh_experiment, CHSHResult
+    from src.backend_manager import BackendManager, ExecutionMode
+
+    params = attack_params or {}
+    mode_enum = ExecutionMode(execution_mode)
+
+    if mode_enum == ExecutionMode.IBM_HARDWARE:
+        if not confirmed_hardware:
+            return {
+                "success": False,
+                "error": "Explicit confirmation required for IBM Quantum hardware execution.",
+                "result": None,
+            }
+        try:
+            bm = BackendManager(
+                mode=mode_enum,
+                backend_name=ibm_backend,
+                ibm_token=ibm_token,
+            )
+            # Pre-validate environment
+            valid, msg = bm.validate_ibm_environment()
+            if not valid:
+                return {"success": False, "error": msg, "result": None}
+
+            res = run_chsh_experiment(
+                shots=shots,
+                attack_type=attack_type,
+                attack_params=params,
+                backend_executor=bm,
+            )
+            return {"success": True, "error": None, "result": res}
+        except Exception as e:
+            return {"success": False, "error": str(e), "result": None}
+
+    elif mode_enum == ExecutionMode.NOISY_SIMULATOR:
+        bm = BackendManager(
+            mode=mode_enum,
+            noise_strength=float(params.get("noise_strength", 0.1)),
+        )
+        res = run_chsh_experiment(
+            shots=shots,
+            attack_type="DEPOLARIZING_NOISE",
+            attack_params=params,
+            backend_executor=bm,
+            seed_simulator=seed_simulator,
+        )
+        return {"success": True, "error": None, "result": res}
+
+    else:
+        # Ideal simulator or Intercept-Resend attack
+        res = run_chsh_experiment(
+            shots=shots,
+            attack_type=attack_type,
+            attack_params=params,
+            seed_simulator=seed_simulator,
+        )
+        return {"success": True, "error": None, "result": res}
+
+
+
+def _chart_palette() -> dict:
+    """Chart colours from the active UI theme (src/ui/theme.py)."""
+    import streamlit as st
+    from src.ui.theme import chart_colors
+    return chart_colors(st.session_state.get("ui_theme", "DARK"))
+
+
+def render_chsh_correlation_chart(result: Any):
+    _C = _chart_palette()
+    """
+    Renders a matplotlib figure displaying the four measured CHSH correlations
+    alongside theoretical expectation values and error bars.
+    """
+    import matplotlib.pyplot as plt
+    from src.chsh import theoretical_correlations
+
+    th_corrs = theoretical_correlations()
+    labels = ["E(a,b)", "E(a,b')", "E(a',b)", "E(a',b')"]
+    meas_vals = [result.correlations[lbl].correlation for lbl in labels]
+    meas_errs = [result.correlations[lbl].uncertainty for lbl in labels]
+    th_vals = [th_corrs[lbl] for lbl in labels]
+
+    fig, ax = plt.subplots(figsize=(8, 3.8), facecolor=_C["fig"])
+    ax.set_facecolor(_C["axes"])
+
+    x = np.arange(len(labels))
+    width = 0.35
+
+    # Theoretical bars
+    ax.bar(
+        x - width / 2,
+        th_vals,
+        width,
+        label="Theory (Ideal Quantum)",
+        color=_C["accent"],
+        alpha=0.6,
+        edgecolor=_C["accent"],
+    )
+
+    # Measured bars with error bars
+    bar_colors = [_C["accept"] if abs(m - t) < 0.1 else _C["reject"] for m, t in zip(meas_vals, th_vals)]
+    ax.bar(
+        x + width / 2,
+        meas_vals,
+        width,
+        yerr=meas_errs,
+        capsize=4,
+        label=f"Measured ({result.execution_mode})",
+        color=bar_colors,
+        alpha=0.85,
+        edgecolor=_C["fig"],
+        error_kw={"ecolor": _C["fig"], "elinewidth": 1.5},
+    )
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(
+        [f"{lbl}\n(θA={result.correlations[lbl].alice_angle:.2f}, θB={result.correlations[lbl].bob_angle:.2f})" for lbl in labels],
+        color=_C["text"],
+        fontsize=9,
+    )
+    ax.set_ylabel("Expectation Value E", color=_C["text"], fontsize=10)
+    ax.set_ylim(-1.15, 1.15)
+    ax.axhline(0, color=_C["line"], linestyle="--", linewidth=0.8)
+    ax.tick_params(colors=_C["muted"])
+    ax.grid(axis="y", color=_C["grid"], linestyle=":", alpha=0.7)
+
+    # Legend
+    leg = ax.legend(facecolor=_C["fig"], edgecolor=_C["line"], labelcolor=_C["text"], fontsize=8.5)
+    for text in leg.get_texts():
+        text.set_color(_C["text"])
+
+    ax.set_title(
+        f"CHSH Measurement Correlations (Shots={result.shots:,} | Mode={result.execution_mode})",
+        color=_C["text"],
+        fontsize=11,
+        pad=10,
+    )
+    plt.tight_layout()
+    return fig
+
+
+def render_chsh_s_chart(result: Any):
+    _C = _chart_palette()
+    """
+    Renders a gauge/summary plot of S value compared to Classical Bound (2.0)
+    and Quantum Tsirelson Bound (2√2 ≈ 2.828).
+    """
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots(figsize=(8, 2.5), facecolor=_C["fig"])
+    ax.set_facecolor(_C["axes"])
+
+    s_val = result.s_value
+    unc = result.uncertainty
+    ci_low, ci_high = result.confidence_interval_95
+
+    # Shaded regions
+    ax.axvspan(0, 2.0, color=_C["reject"], alpha=0.15, label="Classical Local Hidden Variable (|S| ≤ 2.0)")
+    ax.axvspan(2.0, 2.8284, color=_C["accent"], alpha=0.2, label="Quantum Entanglement Violation (2.0 < S ≤ 2√2)")
+
+    # Bounds
+    ax.axvline(2.0, color=_C["reject"], linestyle="--", linewidth=1.8, label="Classical Bound (S = 2.0)")
+    ax.axvline(2.8284, color=_C["accent"], linestyle="-.", linewidth=1.8, label="Tsirelson Bound (S = 2√2 ≈ 2.828)")
+
+    # Measured S point with CI
+    marker_color = _C["accept"] if result.violates_classical else (_C["warn"] if s_val > 2.0 else _C["reject"])
+    ax.errorbar(
+        s_val,
+        0,
+        xerr=unc * 1.96,
+        fmt="o",
+        color=marker_color,
+        ecolor=_C["fig"],
+        elinewidth=2.5,
+        capsize=6,
+        markersize=9,
+        label=f"Measured S = {s_val:.3f} ± {unc:.3f} (95% CI)",
+        zorder=5,
+    )
+
+    ax.set_xlim(0.8, 3.1)
+    ax.set_ylim(-0.5, 0.5)
+    ax.set_yticks([])
+    ax.set_xlabel("CHSH Bell Parameter S", color=_C["text"], fontsize=10)
+    ax.tick_params(colors=_C["muted"])
+    ax.grid(axis="x", color=_C["grid"], linestyle=":", alpha=0.7)
+
+    leg = ax.legend(
+        loc="upper left",
+        bbox_to_anchor=(0.0, 1.35),
+        ncol=2,
+        facecolor=_C["fig"],
+        edgecolor=_C["line"],
+        fontsize=8,
+    )
+    for text in leg.get_texts():
+        text.set_color(_C["text"])
+
+    plt.tight_layout()
+    return fig
+
+
+def render_chsh_comparison_chart(comparison: Dict[str, Any]):
+    _C = _chart_palette()
+    """
+    Renders comparison plot for Clean, Depolarizing Noise, and Intercept-Resend.
+    """
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots(figsize=(8, 3.2), facecolor=_C["fig"])
+    ax.set_facecolor(_C["axes"])
+
+    cases = ["CLEAN", "DEPOLARIZING", "INTERCEPT_RESEND"]
+    case_labels = ["Clean Channel\n(Ideal Bell State)", "Depolarizing Noise\n(Decoherence)", "Intercept-Resend\n(Eve Measurement)"]
+    s_vals = [comparison[c].s_value for c in cases]
+    s_errs = [comparison[c].uncertainty for c in cases]
+    colors = [_C["accept"], _C["warn"], _C["reject"]]
+
+    x = np.arange(len(cases))
+    ax.bar(
+        x,
+        s_vals,
+        yerr=s_errs,
+        capsize=5,
+        color=colors,
+        alpha=0.85,
+        edgecolor=_C["fig"],
+        width=0.45,
+        error_kw={"ecolor": _C["fig"], "elinewidth": 1.5},
+    )
+
+    ax.axhline(2.0, color=_C["reject"], linestyle="--", linewidth=1.5, label="Classical Limit (S = 2.0)")
+    ax.axhline(2.8284, color=_C["accent"], linestyle="-.", linewidth=1.5, label="Tsirelson Bound (S = 2.828)")
+
+    for i, v in enumerate(s_vals):
+        ax.text(
+            x[i],
+            v + 0.12,
+            f"S = {v:.3f}\n±{s_errs[i]:.3f}",
+            ha="center",
+            va="bottom",
+            color=_C["text"],
+            fontsize=9,
+            fontweight="bold",
+        )
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(case_labels, color=_C["text"], fontsize=9.5)
+    ax.set_ylabel("CHSH S Parameter", color=_C["text"], fontsize=10)
+    ax.set_ylim(0, 3.4)
+    ax.tick_params(colors=_C["muted"])
+    ax.grid(axis="y", color=_C["grid"], linestyle=":", alpha=0.7)
+
+    leg = ax.legend(facecolor=_C["fig"], edgecolor=_C["line"], fontsize=8.5)
+    for text in leg.get_texts():
+        text.set_color(_C["text"])
+
+    ax.set_title("Channel Degradation: Clean vs Noise vs Eavesdropping", color=_C["text"], fontsize=11, pad=10)
+    plt.tight_layout()
+    return fig
+

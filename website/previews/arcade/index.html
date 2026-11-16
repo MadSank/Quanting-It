@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quatinit, preview D: Arcade</title>
+<meta name="description" content="Play Eve: steal a quantum key without setting off the alarm. Design preview D.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Chivo:wght@400;700;900&family=Silkscreen:wght@700&display=swap" rel="stylesheet">
+<style>
+/* Hallmark · theme: arcade (by request for variety, playful) · genre: playful · job: try · hero: split, the cabinet on the right · nav: wordmark and one link · footer: one line · signature: a playable round as Eve, where every photon you read raises the alarm · mode: fast preview */
+/* Hallmark · pre-emit critique: P4 H5 E5 S5 R3 V4 · weakest: R, sections below the game are thin; the game carries the page */
+:root {
+  --color-paper: oklch(14% 0.04 312); --color-paper-2: oklch(18.5% 0.042 312); --color-paper-3: oklch(23% 0.045 312);
+  --color-ink: oklch(95% 0.014 315); --color-ink-2: oklch(87% 0.018 315); --color-muted: oklch(71% 0.024 315);
+  --color-rule: oklch(34% 0.05 312);
+  --color-accent: oklch(66% 0.215 40); --color-accent-2: oklch(88% 0.195 115); --color-accent-ink: oklch(14% 0.04 312);
+  --color-focus: oklch(88% 0.195 115);
+  --color-crt-r: oklch(63% 0.24 25); --color-crt-b: oklch(60% 0.24 265); --color-crt-c: oklch(78% 0.14 200); --color-shade: oklch(8% 0.02 315); --color-scrim: oklch(8% 0.02 315 / 0.82);
+  --font-display: "Bungee", "Impact", sans-serif; --font-body: "Chivo", ui-sans-serif, sans-serif; --font-outlier: "Silkscreen", monospace;
+  --radius-card: 4px; --shadow-card: 6px 6px 0 var(--color-accent-2); --shadow-press: 2px 2px 0 var(--color-accent-2);
+  --text-sm: 0.875rem; --text-base: 1.0625rem; --text-lg: 1.25rem; --text-title: 1.75rem; --text-display-s: 2.4rem; --text-display: clamp(2.4rem, 4.6vw, 4rem);
+  --container: 1200px; --gutter: clamp(16px, 4vw, 48px);
+}
+*, *::before, *::after { box-sizing: border-box; }
+html, body { overflow-x: clip; }
+html { color-scheme: dark; scrollbar-color: var(--color-rule) var(--color-paper); }
+body { margin: 0; background: var(--color-paper); color: var(--color-ink-2); font-family: var(--font-body); font-size: var(--text-base); line-height: 1.6; caret-color: var(--color-accent-2); }
+::selection { background: var(--color-accent-2); color: var(--color-accent-ink); }
+h1, h2, h3 { font-family: var(--font-display); font-weight: 400; color: var(--color-ink); line-height: 1.02; margin: 0; overflow-wrap: break-word; min-width: 0; text-wrap: balance; }
+h1 { text-shadow: -2px 0 var(--color-crt-r), 2px 0 var(--color-crt-c); }
+p { margin: 0; text-wrap: pretty; }
+a { color: var(--color-accent-2); }
+:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 3px; transition: none; }
+.wrap { max-width: var(--container); margin: 0 auto; padding: 0 var(--gutter); }
+.px { font-family: var(--font-outlier); font-weight: 700; }
+
+.nav .wrap { display: flex; justify-content: space-between; align-items: center; padding-top: 20px; padding-bottom: 20px; }
+.nav .name { font-family: var(--font-display); color: var(--color-ink); text-decoration: none; font-size: var(--text-lg); }
+
+.btn { font: inherit; font-weight: 900; font-size: var(--text-base); border: 2px solid var(--color-ink); border-radius: var(--radius-card); padding: 12px 20px; cursor: pointer;
+  background: var(--color-paper-2); color: var(--color-ink); box-shadow: var(--shadow-card); transition: transform 80ms steps(1), box-shadow 80ms steps(1); }
+.btn:hover { background: var(--color-paper-3); }
+.btn:active { transform: translate(4px, 4px); box-shadow: var(--shadow-press); }
+.btn--primary { background: var(--color-accent); color: var(--color-accent-ink); border-color: var(--color-accent); }
+.btn--primary:hover { background: var(--color-accent-2); border-color: var(--color-accent-2); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+
+.hero .wrap { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 48px; align-items: center; min-height: min(740px, calc(100dvh - 80px)); padding-bottom: 48px; }
+.hero h1 { font-size: var(--text-display); }
+.hero .lede { margin-top: 20px; font-size: var(--text-lg); max-width: 30ch; }
+.hero .actions { margin-top: 28px; display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
+.hero .keys { font-size: var(--text-sm); color: var(--color-muted); }
+kbd { font-family: var(--font-outlier); border: 1px solid var(--color-rule); padding: 0 6px; border-radius: 2px; color: var(--color-ink); }
+
+.cab { background: var(--color-shade); border: 2px solid var(--color-ink); border-radius: var(--radius-card); box-shadow: var(--shadow-card); }
+.hud { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-bottom: 2px solid var(--color-rule); }
+.hud div { padding: 12px 16px; border-right: 2px solid var(--color-rule); }
+.hud div:last-child { border-right: 0; }
+.hud b { display: block; font-family: var(--font-outlier); font-size: var(--text-title); color: var(--color-ink); line-height: 1.1; }
+.hud span { font-size: var(--text-sm); color: var(--color-muted); }
+.alarm { height: 12px; background: var(--color-paper-3); margin-top: 8px; position: relative; }
+.alarm i { position: absolute; inset: 0; background: var(--color-accent); transform-origin: left; transform: scaleX(0); transition: transform 120ms steps(3); }
+.alarm s { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--color-ink); left: 44%; }
+.screen { position: relative; aspect-ratio: 16 / 8; }
+.screen canvas { width: 100%; height: 100%; display: block; }
+.overlay { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 24px; background: var(--color-scrim); }
+.overlay[hidden] { display: none; }
+.overlay h2 { font-size: var(--text-display-s); }
+.overlay p { margin-top: 8px; max-width: 36ch; }
+.overlay .btn { margin-top: 20px; }
+.controls { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 16px; border-top: 2px solid var(--color-rule); }
+.controls .btn { box-shadow: none; padding: 12px 8px; }
+.controls .btn:active { transform: translate(0, 2px); }
+.levels { display: flex; gap: 8px; padding: 12px 16px; border-bottom: 2px solid var(--color-rule); font-size: var(--text-sm); align-items: center; }
+.levels button { font: inherit; font-weight: 700; background: transparent; color: var(--color-muted); border: 1px solid var(--color-rule); border-radius: 2px; padding: 4px 12px; cursor: pointer; }
+.levels button[aria-pressed="true"] { color: var(--color-accent-ink); background: var(--color-accent-2); border-color: var(--color-accent-2); }
+
+section.band { padding: 88px 0; border-top: 2px solid var(--color-rule); }
+.rules { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; margin-top: 32px; }
+.rule { background: var(--color-paper-2); border: 2px solid var(--color-rule); border-radius: var(--radius-card); padding: 24px; }
+.rule .px { color: var(--color-accent-2); font-size: var(--text-title); }
+.rule h3 { font-size: var(--text-lg); margin-top: 12px; }
+.rule p { margin-top: 8px; color: var(--color-muted); }
+.band h2 { font-size: var(--text-display-s); }
+footer { border-top: 2px solid var(--color-rule); padding: 24px 0 40px; font-size: var(--text-sm); color: var(--color-muted); }
+footer .wrap { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+@media (max-width: 900px) { .hero .wrap, .rules { grid-template-columns: minmax(0, 1fr); } }
+@media (prefers-reduced-motion: reduce) { .btn, .alarm i { transition: none; } }
+</style>
+</head>
+<body>
+<header class="nav"><div class="wrap"><a class="name" href="#top">Quatinit</a><a href="https://github.com/MadSank/Quanting-It">Source</a></div></header>
+<main id="top">
+  <section class="hero" aria-labelledby="h1">
+    <div class="wrap">
+      <div>
+        <h1 id="h1">Steal the key. Stay hidden.</h1>
+        <p class="lede">You are Eve. Read Alice’s photons before Bob does.</p>
+        <div class="actions">
+          <button class="btn btn--primary" id="start">Play as Eve</button>
+          <span class="keys"><kbd>Z</kbd> or <kbd>X</kbd> to measure, <kbd>Space</kbd> to let one pass</span>
+        </div>
+      </div>
+      <div class="cab">
+        <div class="levels" role="group" aria-label="Level">
+          <span>Level</span>
+          <button aria-pressed="false" data-lv="0">1: v0</button>
+          <button aria-pressed="true" data-lv="1">2: BB84</button>
+        </div>
+        <div class="hud">
+          <div><b id="stolen">0/16</b><span>key bits you know</span></div>
+          <div><b id="sifted">0</b><span>bits Bob kept</span></div>
+          <div><b id="qber">0%</b><span>Bob’s alarm</span><div class="alarm" aria-hidden="true"><i id="abar"></i><s></s></div></div>
+        </div>
+        <div class="screen"><canvas id="game" aria-label="Photons travelling from Alice to Bob"></canvas>
+          <div class="overlay" id="ov"><div><h2 id="ovh">Insert coin</h2><p id="ovp">Photons fly from Alice to Bob. Measure one to learn its bit, but a wrong guess changes it.</p><button class="btn btn--primary" id="go">Start round</button></div></div>
+        </div>
+        <div class="controls">
+          <button class="btn" data-m="0">Measure straight</button>
+          <button class="btn" data-m="1">Measure diagonal</button>
+          <button class="btn" data-m="-1">Let it pass</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" aria-labelledby="h2a">
+    <div class="wrap">
+      <h2 id="h2a">Why you keep losing</h2>
+      <div class="rules">
+        <div class="rule"><span class="px">50%</span><h3>You guess the basis</h3><p>Half the time you pick wrong and learn nothing.</p></div>
+        <div class="rule"><span class="px">25%</span><h3>Wrong guesses leave marks</h3><p>Each photon you read is wrong at Bob a quarter of the time.</p></div>
+        <div class="rule"><span class="px">11%</span><h3>Bob sounds the alarm</h3><p>Past this error rate the key is thrown away.</p></div>
+      </div>
+    </div>
+  </section>
+</main>
+<footer><div class="wrap"><span>Quatinit, a research prototype running in simulation.</span><a href="https://github.com/MadSank/Quanting-It">github.com/MadSank/Quanting-It</a></div></footer>
+<script>
+(() => {
+  const $ = (s) => document.querySelector(s), css = getComputedStyle(document.documentElement), C = (n) => css.getPropertyValue(n).trim();
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv = $('#game'), ctx = cv.getContext('2d');
+  let W, H, level = 1, photons = [], running = false, t0 = 0, stolen = 0, sifted = 0, errs = 0, spawn = 0, last = 0, flash = null;
+  function size() { const r = cv.getBoundingClientRect(), d = devicePixelRatio || 1; W = r.width; H = r.height; cv.width = W * d; cv.height = H * d; ctx.setTransform(d, 0, 0, d, 0, 0); }
+  size(); addEventListener('resize', size);
+  const GATE = () => W * 0.5;
+  function newPhoton() { return { x: 70, basis: Math.random() < .5 ? 0 : 1, bit: Math.random() < .5 ? 0 : 1, touched: false, seen: null }; }
+  function hud() {
+    $('#stolen').textContent = `${stolen}/16`; $('#sifted').textContent = sifted;
+    const q = sifted ? errs / sifted : 0; $('#qber').textContent = Math.round(q * 100) + '%';
+    $('#abar').style.transform = `scaleX(${Math.min(q / 0.25, 1)})`;
+  }
+  function end(win, h, p) { running = false; $('#ovh').textContent = h; $('#ovp').textContent = p; $('#go').textContent = 'Play again'; $('#ov').hidden = false; }
+  function reach(p) { // photon arrives at Bob
+    const bBasis = Math.random() < .5 ? 0 : 1; if (bBasis !== p.origBasis) return; // discarded in sifting
+    sifted++;
+    const got = bBasis === p.basis ? p.bit : (Math.random() < .5 ? 0 : 1);
+    if (got !== p.origBit) errs++;
+    if (p.touched && p.measuredBasis === p.origBasis) stolen++;
+    hud();
+    const q = errs / sifted;
+    if (sifted >= 8 && q > 0.11) end(false, 'Caught', `Bob’s error rate hit ${Math.round(q * 100)}%. He threw the key away. You learned ${stolen} bits of nothing.`);
+    else if (stolen >= 16) end(true, 'You got the key', 'Rare. Real BB84 checks more bits and you would still be seen.');
+    else if (sifted >= 40) end(true, 'Key agreed', stolen ? `Bob never noticed, but you only know ${stolen} of the bits.` : 'Bob never noticed, because you never looked.');
+  }
+  function act(m) {
+    if (!running) return;
+    const p = photons.find((q) => !q.touched && !q.passed && Math.abs(q.x - GATE()) < 70);
+    if (!p) return;
+    if (m < 0) { p.passed = true; return; }
+    p.touched = true; p.measuredBasis = m;
+    const r = m === p.basis ? p.bit : (Math.random() < .5 ? 0 : 1);
+    p.basis = m; p.bit = r; p.seen = r; flash = { x: p.x, ok: m === p.origBasis, t: performance.now() };
+  }
+  function v0() { end(true, 'Too easy', 'v0 sends the message itself in plain text. You just read it: "meet at nine".'); }
+  function frame(ts) {
+    if (!running) return draw(ts);
+    const dt = Math.min((ts - (last || ts)) / 1000, .05); last = ts;
+    if ((spawn -= dt) <= 0) { const p = newPhoton(); p.origBasis = p.basis; p.origBit = p.bit; photons.push(p); spawn = 1.1; }
+    photons.forEach((p) => { p.x += dt * 110; });
+    photons = photons.filter((p) => { if (p.x > W - 60) { reach(p); return false; } return true; });
+    draw(ts); if (running) requestAnimationFrame(frame);
+  }
+  function draw(ts) {
+    ctx.fillStyle = C('--color-shade'); ctx.fillRect(0, 0, W, H);
+    const y = H / 2;
+    ctx.strokeStyle = C('--color-rule'); ctx.lineWidth = 2; ctx.setLineDash([6, 8]); ctx.beginPath(); ctx.moveTo(40, y); ctx.lineTo(W - 40, y); ctx.stroke(); ctx.setLineDash([]);
+    ctx.font = `700 13px ${C('--font-outlier')}`; ctx.fillStyle = C('--color-ink-2'); ctx.textAlign = 'center';
+    ctx.fillText('Alice', 40, y - 34); ctx.fillText('Bob', W - 40, y - 34); ctx.fillStyle = C('--color-accent'); ctx.fillText('You', GATE(), y - 70);
+    ctx.strokeStyle = C('--color-accent'); ctx.strokeRect(GATE() - 70, y - 54, 140, 108);
+    photons.forEach((p) => {
+      ctx.fillStyle = p.touched ? C('--color-accent') : C('--color-crt-c');
+      ctx.beginPath(); ctx.arc(p.x, y, 13, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = C('--color-accent-ink'); ctx.font = `700 13px ${C('--font-outlier')}`; ctx.fillText(p.seen === null ? '?' : p.seen, p.x, y + 5);
+    });
+    if (flash && ts - flash.t < 500) { ctx.fillStyle = flash.ok ? C('--color-accent-2') : C('--color-crt-r'); ctx.font = `700 14px ${C('--font-outlier')}`; ctx.fillText(flash.ok ? 'Right basis' : 'Wrong basis', GATE(), y + 80); }
+  }
+  function start() {
+    $('#ov').hidden = true; if (level === 0) return v0();
+    photons = []; stolen = sifted = errs = 0; spawn = 0; last = 0; running = true; hud(); requestAnimationFrame(frame);
+  }
+  $('#go').addEventListener('click', start);
+  $('#start').addEventListener('click', () => { $('.cab').scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'center' }); start(); });
+  document.querySelectorAll('[data-m]').forEach((b) => b.addEventListener('click', () => act(+b.dataset.m)));
+  document.querySelectorAll('[data-lv]').forEach((b) => b.addEventListener('click', () => { level = +b.dataset.lv; document.querySelectorAll('[data-lv]').forEach((x) => x.setAttribute('aria-pressed', x === b)); running = false; $('#ovh').textContent = level ? 'Level 2: BB84' : 'Level 1: v0'; $('#ovp').textContent = level ? 'Measure photons to learn the key without raising Bob’s alarm.' : 'The old protocol. See how long it takes.'; $('#go').textContent = 'Start round'; $('#ov').hidden = false; }));
+  addEventListener('keydown', (e) => { if (!running) return; if (e.key === 'z' || e.key === 'Z') act(0); else if (e.key === 'x' || e.key === 'X') act(1); else if (e.key === ' ') { e.preventDefault(); act(-1); } });
+  draw(0);
+})();
+</script>
+</body>
+</html>

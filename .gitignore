@@ -5,3 +5,7 @@ venv/
 .env
 .pytest_cache/
 .streamlit/secrets.toml
+# red-team arena: hidden plaintexts and ground truth
+redteam/secrets/
+# browser screenshots
+.playwright-mcp/

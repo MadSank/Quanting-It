@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quatinit, Lumen variant 1: Particles</title>
+<meta name="description" content="Your sentence breaks into bits and photons as it crosses from Alice to Bob. Lumen variant 1.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif&family=Geist:wght@400;500&family=Geist+Mono:wght@400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../_lumen/base.css">
+<style>
+/* Hallmark · theme: lumen (chosen by the user) · genre: atmospheric · job: try · hero: the sentence you type · nav: wordmark only · footer: one line · signature: each character of your sentence is a particle that becomes hash bits, photons, ciphertext and your sentence again · scroll: one pinned canvas · mode: fast preview */
+/* Hallmark · pre-emit critique: P4 H4 E5 S5 R4 V5 · weakest: R, one composition carries the page; the morph is the point */
+.field { position: relative; width: 100%; height: 100%; max-height: 520px; }
+.field canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.field .cap { position: absolute; left: 0; right: 0; bottom: 0; display: flex; justify-content: space-between; font-size: var(--text-sm); color: var(--color-muted); }
+.field .cap b { color: var(--color-live); font-weight: 400; }
+.field .cap b.bad { color: var(--color-accent-2); }
+.meter { display: inline-flex; gap: 8px; align-items: baseline; }
+.step .n { font-family: var(--font-outlier); font-size: var(--text-sm); color: var(--color-accent); }
+</style>
+</head>
+<body>
+<header class="nav"><div class="wrap"><a class="name" href="#top">quatinit</a><a href="https://github.com/MadSank/Quanting-It">Source</a></div></header>
+<main id="top">
+  <section class="hero" aria-labelledby="h1">
+    <div class="wrap">
+      <h1 id="h1">Type a sentence. Watch it come apart.</h1>
+      <p class="lede">Every letter becomes bits, then light, then noise only Bob can undo.</p>
+      <form class="compose" id="compose">
+        <label class="vh" for="text">Your sentence</label>
+        <input id="text" maxlength="48" value="meet me at the north gate at nine" autocomplete="off">
+        <button class="btn" type="submit">Send it</button>
+      </form>
+    </div>
+  </section>
+
+  <section class="wrap story" id="story" aria-label="Your sentence, step by step">
+    <div>
+      <article class="step" data-s="0"><h2>your words</h2><p>Plain letters. In v0, this is exactly what crossed the wire.</p></article>
+      <article class="step" data-s="1"><h2>a fingerprint</h2><p>Its SHA-256 hash, cut to 32 bits. Each bit picks which one-time key Alice reveals to sign it.</p></article>
+      <article class="step" data-s="2"><h2>light</h2><p>Photons in two bases build a key. Bob keeps the ones where his basis matched.</p></article>
+      <article class="step" data-s="3"><h2>someone looks</h2><p>Eve measures in the middle. A quarter of what she touches arrives wrong, and Bob notices.</p></article>
+      <article class="step" data-s="4"><h2>noise</h2><p>With a clean key, AES-256-GCM turns your words into this. It is all an eavesdropper keeps.</p></article>
+      <article class="step" data-s="5"><h2>your words, again</h2><p>Bob checks the signature, opens the seal, and reads it.</p></article>
+    </div>
+    <div class="stage">
+      <div class="field" aria-live="polite">
+        <canvas id="cv" aria-label="Your sentence as moving characters"></canvas>
+        <div class="cap"><span id="where">alice</span><span class="meter" id="meter"></span></div>
+      </div>
+    </div>
+  </section>
+</main>
+<footer><div class="wrap"><span>Quatinit, a research prototype running in simulation.</span><a href="https://github.com/MadSank/Quanting-It">github.com/MadSank/Quanting-It</a></div></footer>
+<script type="module">
+import { sha256Bits, seal, onStep, reduced } from '../_lumen/story.js';
+const $ = (s) => document.querySelector(s), css = getComputedStyle(document.documentElement), C = (n) => css.getPropertyValue(n).trim();
+const cv = $('#cv'), ctx = cv.getContext('2d');
+let W = 0, H = 0, step = 0, parts = [], bits = '', ct = '', t0 = 0, errs = 0, seen = 0;
+const text = () => ($('#text').value.trim() || 'meet me at the north gate at nine').slice(0, 48);
+function size() { const r = cv.getBoundingClientRect(), d = devicePixelRatio || 1; W = r.width; H = r.height; cv.width = W * d; cv.height = H * d; ctx.setTransform(d, 0, 0, d, 0, 0); }
+size(); addEventListener('resize', () => { size(); layout(step, true); });
+
+// Lay characters out in wrapped lines; returns [{ch, x, y}]
+function flow(str, font, size, lh, maxW, cx = 0, cy = 0) {
+  ctx.font = `${size}px ${font}`; const words = str.split(' '), lines = [[]]; let w = 0;
+  for (const word of words) { const ww = ctx.measureText(word + ' ').width; if (w + ww > maxW && lines.at(-1).length) { lines.push([]); w = 0; } lines.at(-1).push(word); w += ww; }
+  const out = [], top = cy - (lines.length * lh) / 2;
+  lines.forEach((ln, li) => { let x = cx; const s = ln.join(' '); for (const ch of s) { out.push({ ch, x, y: top + li * lh, size, font }); x += ctx.measureText(ch).width; } out.push({ ch: ' ', x, y: top + li * lh, size, font, hide: true }); });
+  return out;
+}
+function grid(str, cols, size, gap, cx, cy, font) {
+  const rows = Math.ceil(str.length / cols), out = [];
+  [...str].forEach((ch, i) => out.push({ ch, x: cx + (i % cols) * gap - ((cols - 1) * gap) / 2, y: cy + Math.floor(i / cols) * size * 1.5 - (rows * size * 1.5) / 2, size, font }));
+  return out;
+}
+function targets(s) {
+  const serif = C('--font-display'), mono = C('--font-outlier'), mid = H / 2 - 20;
+  if (s === 0 || s === 5) return flow(text(), serif, Math.min(56, W / 9), Math.min(60, W / 8.5), W - 40, 20, mid).map((p) => ({ ...p, col: s === 5 ? '--color-live' : '--color-ink' }));
+  if (s === 1) return grid(bits, 8, 26, Math.min(40, W / 10), W / 2, mid, mono).map((p) => ({ ...p, col: '--color-accent' }));
+  if (s === 2 || s === 3) return [...Array(32)].map((_, i) => ({ ch: '|/-\\'[i % 4], x: 0, y: mid, size: 26, font: mono, beam: i, col: '--color-accent' }));
+  if (s === 4) return grid(ct.slice(0, 64), 16, 18, Math.min(28, W / 18), W / 2, mid, mono).map((p) => ({ ...p, col: '--color-accent' }));
+  return [];
+}
+function layout(s, snap = false) {
+  const tg = targets(s), n = Math.max(tg.length, parts.length);
+  while (parts.length < n) parts.push({ x: W / 2, y: H / 2, ch: ' ', a: 0, size: 20, font: C('--font-outlier'), col: '--color-ink' });
+  parts.forEach((p, i) => {
+    const t = tg[i];
+    p.fx = p.x; p.fy = p.y; p.fa = p.a; p.fsize = p.size;
+    if (t) { Object.assign(p, { tx: t.x, ty: t.y, ta: t.hide ? 0 : 1, tsize: t.size, nch: t.ch, nfont: t.font, ncol: t.col, beam: t.beam }); }
+    else { Object.assign(p, { tx: p.x, ty: p.y + 30, ta: 0, tsize: p.size, nch: p.ch, beam: undefined }); }
+    p.t = snap || reduced() ? 1 : 0; p.delay = snap ? 0 : Math.random() * 0.35;
+  });
+  t0 = performance.now(); errs = 0; seen = 0;
+}
+const ease = (x) => 1 - Math.pow(1 - x, 3);
+function frame(now) {
+  ctx.clearRect(0, 0, W, H);
+  const beamY = H / 2 - 20, eveX = W / 2;
+  if (step === 2 || step === 3) {
+    ctx.strokeStyle = C('--color-rule-2'); ctx.setLineDash([4, 6]); ctx.beginPath(); ctx.moveTo(20, beamY + 10); ctx.lineTo(W - 20, beamY + 10); ctx.stroke(); ctx.setLineDash([]);
+    ctx.font = `14px ${C('--font-body')}`; ctx.fillStyle = C('--color-muted'); ctx.fillText('alice', 20, beamY - 30); ctx.fillText('bob', W - 50, beamY - 30);
+    if (step === 3) { ctx.strokeStyle = C('--color-accent-2'); ctx.strokeRect(eveX - 40, beamY - 30, 80, 70); ctx.fillStyle = C('--color-accent-2'); ctx.fillText('eve', eveX - 12, beamY - 40); }
+  }
+  for (const p of parts) {
+    const k = Math.min(1, Math.max(0, ((now - t0) / 900) - p.delay)), e = ease(reduced() ? 1 : k);
+    if (k >= .5 || reduced()) { p.ch = p.nch; if (p.nfont) p.font = p.nfont; if (p.ncol) p.col = p.ncol; }
+    let tx = p.tx, ty = p.ty;
+    if (p.beam !== undefined && k >= 1 && !reduced()) { // photons travel the fibre
+      const span = W - 60, pos = ((now / 1000) * 0.14 + p.beam / 20) % 1; tx = 30 + pos * span; ty = beamY;
+      if (step === 3 && Math.abs(tx - eveX) < 3) { p.tapped = Math.random() < .25; seen++; if (p.tapped) errs++; }
+      if (pos < 0.02) p.tapped = false;
+    } else if (p.beam !== undefined) { tx = 30 + (p.beam / 20) * (W - 60); ty = beamY; }
+    p.x = p.fx + (tx - p.fx) * e; p.y = p.fy + (ty - p.fy) * e; p.a = p.fa + (p.ta - p.fa) * e; p.size = p.fsize + (p.tsize - p.fsize) * e;
+    if (p.a < 0.02) continue;
+    ctx.globalAlpha = p.a; ctx.font = `${p.size}px ${p.font}`;
+    ctx.fillStyle = C(p.tapped && step === 3 && tx > eveX ? '--color-accent-2' : p.col); ctx.fillText(p.ch, p.x, p.y + p.size);
+  }
+  ctx.globalAlpha = 1;
+  const m = $('#meter');
+  if (step === 3) { const q = seen ? errs / seen : 0; m.innerHTML = `errors at bob <b class="${q > .11 ? 'bad' : ''}">${Math.round(q * 100)}%</b>${q > .11 ? ', key thrown away' : ''}`; }
+  else if (step === 2) m.innerHTML = 'errors at bob <b>1.5%</b>';
+  else m.textContent = '';
+  requestAnimationFrame(frame);
+}
+const WHERE = ['alice’s screen', 'alice signs', 'the fibre', 'the fibre, tapped', 'the wire', 'bob’s screen'];
+async function refresh() { bits = await sha256Bits(text()); ct = await seal(text()); }
+onStep(async (s) => { step = s; $('#where').textContent = WHERE[s]; layout(s); });
+$('#text').addEventListener('input', async () => { await refresh(); layout(step); });
+$('#compose').addEventListener('submit', (e) => { e.preventDefault(); $('#story').scrollIntoView({ behavior: reduced() ? 'auto' : 'smooth' }); });
+await refresh(); layout(0, true); requestAnimationFrame(frame);
+</script>
+</body>
+</html>

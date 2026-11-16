@@ -43,7 +43,7 @@ class Bob:
         """
         self.session_manager = session_manager
         self.qpkd_session = qpkd_session
-        self.e91_monitor = e91_monitor or E91Monitor(n_pairs=64)
+        self.e91_monitor = e91_monitor or E91Monitor(num_pairs=64)
         self.trusted_classical_pub_key = trusted_classical_pub_key
         self.key_register = key_register or VerifierKeyRegister(owner="Bob")
 

@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quatinit, preview A: Terminal</title>
+<meta name="description" content="Quatinit: quantum-safe messaging you can try to eavesdrop on. Design preview A.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Martian+Mono:wdth,wght@75..112.5,400..700&display=swap" rel="stylesheet">
+<style>
+/* Hallmark · theme: terminal (dealt 2/3, seed interactive-quatinit-quantum-safe-cryptography-6b12) · genre: atmospheric · job: try · hero: split, the live photon stream on the right · nav: tabbed wordmark, edge-aligned · footer: one line · signature: a BB84 stream you can eavesdrop on, its error rate climbing until the key aborts · mode: fast preview */
+/* Hallmark · pre-emit critique: P4 H5 E4 S4 R4 V4 · weakest: P, a preview with no real screenshot; the protocol itself is the picture, simulated live from the project's own parameters */
+:root {
+  --color-paper: oklch(12.5% 0.012 150); --color-paper-2: oklch(16% 0.016 150); --color-paper-3: oklch(20.5% 0.022 150);
+  --color-ink: oklch(94% 0.03 140); --color-ink-2: oklch(82% 0.05 142); --color-muted: oklch(64% 0.06 145);
+  --color-rule: oklch(27% 0.028 148); --color-rule-2: oklch(38% 0.045 146);
+  --color-accent: oklch(87% 0.2 142); --color-accent-ink: oklch(14% 0.02 150); --color-focus: oklch(87% 0.2 142);
+  --color-accent-wash: oklch(23% 0.06 145);
+  --glyph-0: oklch(30% 0.06 146); --glyph-2: oklch(47% 0.11 144); --glyph-4: oklch(67% 0.17 142); --glyph-6: oklch(86% 0.2 141);
+  --font-display: "Martian Mono", ui-monospace, monospace; --font-body: var(--font-display);
+  --stretch-display: 112.5%; --stretch-body: 87.5%; --tracking-display: -0.02em;
+  --text-sm: 0.8125rem; --text-base: 0.9375rem; --text-lg: 1.125rem; --text-title: 1.5rem;
+  --text-display-s: 2.25rem; --text-display: clamp(2.1rem, 3.9vw, 3.2rem);
+  --dur-micro: 120ms; --container: 1200px; --gutter: clamp(16px, 4vw, 48px);
+}
+*, *::before, *::after { box-sizing: border-box; }
+html, body { overflow-x: clip; }
+html { color-scheme: dark; scrollbar-color: var(--color-rule-2) var(--color-paper); }
+body { margin: 0; background: var(--color-paper); color: var(--color-ink); font-family: var(--font-body);
+  font-stretch: var(--stretch-body); font-size: var(--text-base); line-height: 1.65; font-variant-numeric: tabular-nums; caret-color: var(--color-accent); }
+::selection { background: var(--color-accent); color: var(--color-accent-ink); }
+h1, h2, h3 { font-family: var(--font-display); font-weight: 500; font-stretch: var(--stretch-display);
+  letter-spacing: var(--tracking-display); text-wrap: balance; line-height: 1.12; margin: 0; overflow-wrap: break-word; min-width: 0; }
+p { margin: 0; text-wrap: pretty; }
+a { color: var(--color-ink-2); text-decoration: underline dotted; text-underline-offset: 0.2em; }
+a:hover { color: var(--color-accent); }
+:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; transition: none; }
+.wrap { max-width: var(--container); margin: 0 auto; padding: 0 var(--gutter); }
+
+/* nav */
+.nav { border-bottom: 1px solid var(--color-rule); }
+.nav .wrap { display: flex; align-items: stretch; gap: 0; min-height: 44px; }
+.mark { background: var(--color-accent); color: var(--color-accent-ink); font-weight: 700; padding: 0 16px; display: flex; align-items: center; font-size: var(--text-sm); text-decoration: none; }
+.nav ol { list-style: none; display: flex; gap: 20px; margin: 0 0 0 20px; padding: 0; align-items: center; font-size: var(--text-sm); }
+.nav ol a { color: var(--color-muted); text-decoration: none; }
+.nav ol a:hover { color: var(--color-ink); }
+.nav ol span { color: var(--color-rule-2); margin-right: 8px; }
+.nav .src { margin-left: auto; border-left: 1px solid var(--color-rule); padding: 0 0 0 16px; display: flex; align-items: center; font-size: var(--text-sm); }
+@media (max-width: 720px) { .nav ol { display: none; } }
+
+/* hero */
+.hero .wrap { display: grid; grid-template-columns: minmax(0, 6fr) minmax(0, 6fr); gap: 48px; align-items: center; min-height: min(760px, calc(100dvh - 45px)); padding-top: 40px; padding-bottom: 40px; }
+.hero h1 { font-size: var(--text-display); }
+.hero .lede { margin-top: 20px; color: var(--color-ink-2); max-width: 34ch; }
+.actions { display: flex; gap: 12px; margin-top: 28px; flex-wrap: wrap; }
+.btn { font: inherit; font-size: var(--text-sm); font-weight: 500; padding: 12px 16px; border-radius: 0; cursor: pointer; border: 1px solid var(--color-ink-2);
+  background: transparent; color: var(--color-ink); transition: background-color var(--dur-micro) steps(1), color var(--dur-micro) steps(1); text-decoration: none; }
+.btn:hover { background: var(--color-paper-3); }
+.btn--primary { background: var(--color-accent); border-color: var(--color-accent); color: var(--color-accent-ink); }
+.btn--primary:hover { background: var(--color-ink); border-color: var(--color-ink); }
+.btn[aria-pressed="true"] { background: var(--color-accent-wash); border-color: var(--color-accent); color: var(--color-accent); }
+.btn:active { transform: translateY(1px); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.hero .note { margin-top: 16px; font-size: var(--text-sm); color: var(--color-muted); }
+
+/* the live session */
+.session { background: var(--color-paper-2); border: 1px solid var(--color-rule); }
+.session-head { display: flex; justify-content: space-between; gap: 12px; padding: 8px 16px; border-bottom: 1px solid var(--color-rule-2); font-size: var(--text-sm); color: var(--color-muted); }
+.stream { position: relative; height: 300px; overflow: hidden; }
+.stream canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.stream pre { margin: 0; padding: 16px; color: var(--glyph-4); font-size: 12px; line-height: 1.5; }
+.readout { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--color-rule); }
+.readout > div { padding: 12px 16px; border-right: 1px solid var(--color-rule); min-width: 0; }
+.readout > div:last-child { border-right: 0; }
+.fig { font-stretch: var(--stretch-display); font-size: var(--text-title); line-height: 1.1; display: block; }
+.fig-label { font-size: var(--text-sm); color: var(--color-muted); }
+.verdict { padding: 12px 16px; border-top: 1px solid var(--color-rule); font-size: var(--text-sm); min-height: calc(1.65em + 24px); }
+.verdict.bad { background: var(--color-accent-wash); color: var(--color-accent); }
+.verdict b { font-weight: 700; }
+.bar { height: 4px; background: var(--color-paper-3); position: relative; margin-top: 8px; }
+.bar i { position: absolute; inset: 0 auto 0 0; width: 100%; background: var(--color-accent); transform-origin: left; transform: scaleX(0); transition: transform 200ms steps(4); }
+.bar s { position: absolute; top: -4px; bottom: -4px; width: 1px; background: var(--color-ink-2); left: 44%; }
+
+/* sections */
+section.band { border-top: 1px solid var(--color-rule); padding: 88px 0; }
+.band-head { display: grid; grid-template-columns: minmax(0, 6fr) minmax(0, 5fr); gap: 32px; align-items: end; margin-bottom: 40px; }
+.band-head h2 { font-size: var(--text-display-s); }
+.band-head p { color: var(--color-ink-2); }
+.diff { background: var(--color-paper-2); border: 1px solid var(--color-rule); font-size: var(--text-lg); }
+.diff-head { display: flex; justify-content: space-between; gap: 12px; padding: 8px 16px; border-bottom: 1px solid var(--color-rule-2); font-size: var(--text-sm); color: var(--color-muted); }
+.diff ol { list-style: none; margin: 0; padding: 8px 0; counter-reset: ln; }
+.diff li { counter-increment: ln; display: grid; grid-template-columns: 3.5em 1.5em minmax(0, 1fr); padding: 8px 16px 8px 0; }
+.diff li::before { content: counter(ln); color: var(--color-rule-2); text-align: right; padding-right: 1em; font-size: var(--text-sm); align-self: center; }
+.diff .del { color: var(--color-muted); }
+.diff .add { background: var(--color-accent-wash); }
+.diff .sign { color: var(--color-muted); }
+.diff .add .sign { color: var(--color-accent); }
+.figs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid var(--color-rule); border-bottom: 1px solid var(--color-rule); }
+.figs div { padding: 28px 20px 24px; border-right: 1px solid var(--color-rule); }
+.figs div:last-child { border-right: 0; }
+.figs .fig { font-size: var(--text-display-s); font-weight: 400; }
+.term { background: var(--color-paper-2); border: 1px solid var(--color-rule); padding: 20px; font-size: var(--text-base); white-space: pre-wrap; margin: 0; min-height: 15em; color: var(--color-ink-2); }
+.term .p { color: var(--color-muted); }
+.term .a { color: var(--color-accent); }
+footer { border-top: 1px solid var(--color-rule); padding: 28px 0 40px; font-size: var(--text-sm); color: var(--color-muted); }
+footer .wrap { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+
+@media (max-width: 900px) {
+  .hero .wrap, .band-head { grid-template-columns: minmax(0, 1fr); }
+  .figs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .figs div:nth-child(2) { border-right: 0; }
+  .figs div:nth-child(-n+2) { border-bottom: 1px solid var(--color-rule); }
+  .diff { font-size: var(--text-base); }
+}
+@media (prefers-reduced-motion: reduce) { .bar i { transition: none; } }
+</style>
+</head>
+<body>
+<header class="nav">
+  <div class="wrap">
+    <a class="mark" href="#top">quatinit</a>
+    <ol>
+      <li><a href="#top"><span>1</span>listen</a></li>
+      <li><a href="#diff"><span>2</span>diff</a></li>
+      <li><a href="#judge"><span>3</span>judge</a></li>
+    </ol>
+    <a class="src" href="https://github.com/MadSank/Quanting-It">source</a>
+  </div>
+</header>
+
+<main id="top">
+  <section class="hero" aria-labelledby="h1">
+    <div class="wrap">
+      <div>
+        <h1 id="h1">Listen in, and the key breaks.</h1>
+        <p class="lede">Alice and Bob share a key over photons. Measuring one leaves marks.</p>
+        <div class="actions">
+          <button class="btn btn--primary" id="eve" aria-pressed="false">Eavesdrop</button>
+          <button class="btn" id="reset">New session</button>
+        </div>
+        <p class="note">BB84 with 40,000 pulses a session. Bob aborts above 11% errors.</p>
+      </div>
+
+      <div class="session" aria-live="polite">
+        <div class="session-head"><span>alice &gt; fibre &gt; bob</span><span id="who">nobody listening</span></div>
+        <div class="stream" id="stream">
+          <pre>| / - \ | | / - - \ / | - \ \ | / - | |
+- \ / | | - / \ - | / \ | - | / - \ / |
+photons in two bases, rendered live with scripting on</pre>
+        </div>
+        <div class="readout">
+          <div><span class="fig" id="sent">0</span><span class="fig-label">photons sent</span></div>
+          <div><span class="fig" id="kept">0</span><span class="fig-label">sifted bits</span></div>
+          <div><span class="fig" id="qber">0.0%</span><span class="fig-label">error rate</span>
+            <div class="bar" aria-hidden="true"><i id="qbar"></i><s></s></div></div>
+        </div>
+        <p class="verdict" id="verdict">Key growing. Errors stay near the fibre’s own 1.5%.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="diff" aria-labelledby="h2a">
+    <div class="wrap">
+      <div class="band-head">
+        <h2 id="h2a">What v1 fixes in v0.</h2>
+        <p>The signed packet in v0 travels in the clear. v1 wraps it in a key nobody else holds.</p>
+      </div>
+      <div class="diff">
+        <div class="diff-head"><span>--- a/v0 &nbsp; +++ b/v1</span><span>4 lines changed</span></div>
+        <ol>
+          <li class="del"><span class="sign">-</span><span>message sent as plaintext</span></li>
+          <li class="del"><span class="sign">-</span><span>missing ML-DSA tag counted as valid</span></li>
+          <li class="add"><span class="sign">+</span><span>BB84 key, aborts above 11% errors</span></li>
+          <li class="add"><span class="sign">+</span><span>AES-256-GCM on every message</span></li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="judge" aria-labelledby="h2b">
+    <div class="wrap">
+      <div class="band-head">
+        <h2 id="h2b">Every attack gets a score.</h2>
+        <p>The judge replays an attack against each version with messages the attacker never sees.</p>
+      </div>
+      <div class="figs">
+        <div><span class="fig">128</span><span class="fig-label"># bits per signing key</span></div>
+        <div><span class="fig">32</span><span class="fig-label"># signature positions</span></div>
+        <div><span class="fig">11%</span><span class="fig-label"># abort threshold</span></div>
+        <div><span class="fig">171</span><span class="fig-label"># tests passing</span></div>
+      </div>
+      <pre class="term" id="term"><span class="p">$</span> python -m redteam.judge attacks/passive.py <span class="a">--versions v0 v1</span>
+
+== passive-grep
+  v0: read 1.00  forged 0  delivered 1.00
+  v1: read 0.00  forged 0  delivered 1.00</pre>
+    </div>
+  </section>
+</main>
+
+<footer><div class="wrap"><span>Quatinit, a research prototype. Simulation only.</span><a href="https://github.com/MadSank/Quanting-It">github.com/MadSank/Quanting-It</a></div></footer>
+
+<script>
+(() => {
+  const css = getComputedStyle(document.documentElement);
+  const C = (n) => css.getPropertyValue(n).trim();
+  const stream = document.getElementById('stream');
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv = document.createElement('canvas'); stream.replaceChildren(cv);
+  const ctx = cv.getContext('2d');
+  const glyph = [['|', '-'], ['/', '\\']];  // basis 0 = rectilinear, 1 = diagonal
+  let W, H, cols, rows, cw = 13, ch = 20, grid = [], eve = false, sent = 0, kept = 0, errs = 0, tested = 0, aborted = false;
+
+  function size() {
+    const r = stream.getBoundingClientRect(), d = devicePixelRatio || 1;
+    W = r.width; H = r.height; cv.width = W * d; cv.height = H * d; ctx.setTransform(d, 0, 0, d, 0, 0);
+    cols = Math.floor((W - 20) / cw); rows = Math.floor((H - 16) / ch); grid = [];
+  }
+  function photon() {
+    const a = Math.random() < .5 ? 0 : 1, bit = Math.random() < .5 ? 0 : 1, b = Math.random() < .5 ? 0 : 1;
+    let state = { basis: a, bit };
+    if (eve) { const e = Math.random() < .5 ? 0 : 1; const r = e === state.basis ? state.bit : (Math.random() < .5 ? 0 : 1); state = { basis: e, bit: r }; }
+    let got = b === state.basis ? state.bit : (Math.random() < .5 ? 0 : 1);
+    if (Math.random() < 0.015) got ^= 1;
+    const sifted = a === b, err = sifted && got !== bit;
+    sent++; if (sifted) { kept++; tested++; if (err) errs++; }
+    return { g: glyph[a][bit], sifted, err, tapped: eve };
+  }
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    ctx.font = `13px ${C('--font-display')}`; ctx.textBaseline = 'top';
+    grid.forEach((row, ri) => row.forEach((p, ci) => {
+      ctx.fillStyle = p.err ? C('--color-ink') : p.sifted ? C('--glyph-6') : C('--glyph-0');
+      if (p.err) { ctx.fillStyle = C('--color-accent-wash'); ctx.fillRect(10 + ci * cw - 1, 8 + ri * ch - 2, cw, ch - 2); ctx.fillStyle = C('--color-ink'); }
+      ctx.fillText(p.err ? 'x' : p.g, 10 + ci * cw, 8 + ri * ch);
+    }));
+  }
+  const $ = (id) => document.getElementById(id);
+  function readout() {
+    const q = tested ? errs / tested : 0;
+    $('sent').textContent = sent.toLocaleString('en-GB'); $('kept').textContent = kept.toLocaleString('en-GB');
+    $('qber').textContent = (q * 100).toFixed(1) + '%';
+    $('qbar').style.transform = `scaleX(${Math.min(q / 0.25, 1)})`;
+    const v = $('verdict');
+    if (tested > 60 && q > 0.11) {
+      aborted = true; v.className = 'verdict bad';
+      v.innerHTML = `<b>abort:</b> error rate ${(q * 100).toFixed(1)}% is over 11%. The key is thrown away; Eve learns nothing that is used.`;
+    } else if (eve) { v.className = 'verdict'; v.textContent = 'Eve is measuring every photon. Watch the errors climb.'; }
+    else { v.className = 'verdict'; v.textContent = 'Key growing. Errors stay near the fibre’s own 1.5%.'; }
+  }
+  function tick() {
+    if (!aborted) {
+      const row = Array.from({ length: cols }, photon);
+      grid.unshift(row); if (grid.length > rows) grid.pop();
+      draw(); readout();
+    }
+    if (!reduce) setTimeout(tick, 140);
+  }
+  function reset() { aborted = false; grid = []; for (let i = 0; i < rows - 1; i++) grid.push(Array.from({ length: cols }, photon)); sent = kept = errs = tested = 0; draw(); readout(); if (reduce) { for (let i = 0; i < rows; i++) { grid.unshift(Array.from({ length: cols }, photon)); } draw(); readout(); } }
+  $('eve').addEventListener('click', (e) => { eve = !eve; e.currentTarget.setAttribute('aria-pressed', eve); e.currentTarget.textContent = eve ? 'Stop listening' : 'Eavesdrop'; $('who').textContent = eve ? 'eve on the fibre' : 'nobody listening'; reset(); });
+  $('reset').addEventListener('click', reset);
+  addEventListener('resize', () => { size(); draw(); });
+  size(); reset(); tick();
+})();
+</script>
+</body>
+</html>

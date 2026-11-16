@@ -94,3 +94,25 @@ class E91Monitor:
         Returns True if the channel error rate is within the acceptable threshold.
         """
         return error_rate <= self.error_threshold
+
+    def measure_chsh(
+        self,
+        shots: int = 4096,
+        attack_type: str = "NONE",
+        attack_params: dict = None,
+        backend_executor: any = None,
+        seed_simulator: int = None,
+    ):
+        """
+        Executes a 4-setting CHSH Bell test to monitor channel non-locality and entanglement.
+        Returns a CHSHResult object.
+        """
+        from src.chsh import run_chsh_experiment
+        return run_chsh_experiment(
+            shots=shots,
+            attack_type=attack_type,
+            attack_params=attack_params,
+            backend_executor=backend_executor,
+            seed_simulator=seed_simulator,
+        )
+

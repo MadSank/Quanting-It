@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quatinit, preview C: Console</title>
+<meta name="description" content="Quatinit: replay attacks against each protocol version and read the record. Design preview C.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Host+Grotesk:wght@400;500&family=Atkinson+Hyperlegible+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* Hallmark · theme: console (dealt 1/3, seed interactive-quatinit-quantum-safe-cryptography-6b12) · console: graphite · genre: modern-minimal · job: try · hero: stage, the arena panel on columns 7 to 12 · nav: bar panel, wordmark, links, one action · footer: one line · signature: pick a version and an attack, replay it, and read the wire as it happens · mode: fast preview */
+/* Hallmark · pre-emit critique: P4 H5 E4 S5 R4 V4 · weakest: P, only one attack has been scored so far; the others are shown as not yet run rather than invented */
+:root {
+  --color-paper: oklch(17% 0.008 250); --color-paper-2: oklch(21% 0.009 250); --color-paper-3: oklch(13.5% 0.007 250);
+  --color-ink: oklch(95% 0.005 250); --color-ink-2: oklch(83% 0.008 250); --color-muted: oklch(71% 0.01 250);
+  --color-rule: oklch(31% 0.01 250); --color-rule-2: oklch(42% 0.012 250);
+  --color-accent: oklch(82% 0.15 80); --color-accent-ink: oklch(18% 0.04 75); --color-accent-soft: oklch(29% 0.05 80); --color-focus: oklch(82% 0.15 80);
+  --color-cool: oklch(77% 0.12 245); --color-cool-soft: oklch(29% 0.05 245);
+  --color-ok: oklch(76% 0.15 150); --color-ok-soft: oklch(24.5% 0.03 150); --color-bad: oklch(70% 0.17 25); --color-bad-soft: oklch(24.5% 0.035 25);
+  --font-display: "Host Grotesk", ui-sans-serif, system-ui, sans-serif; --font-body: var(--font-display);
+  --font-outlier: "Atkinson Hyperlegible Mono", ui-monospace, monospace;
+  --radius-card: 10px; --radius-pill: 6px; --tracking-display: -0.03em;
+  --text-sm: 0.875rem; --text-base: 1rem; --text-lg: 1.125rem; --text-title: 1.5rem; --text-display-s: 2.5rem; --text-display: clamp(2.6rem, 4.8vw, 4.1rem);
+  --dur-micro: 140ms; --ease: cubic-bezier(.2, .7, .2, 1); --container: 1200px; --gutter: clamp(16px, 4vw, 48px);
+}
+*, *::before, *::after { box-sizing: border-box; }
+html, body { overflow-x: clip; }
+html { color-scheme: dark; scrollbar-color: var(--color-rule-2) var(--color-paper); }
+body { margin: 0; background: var(--color-paper); color: var(--color-muted); font-family: var(--font-body); font-size: var(--text-base); line-height: 1.55; caret-color: var(--color-accent); }
+::selection { background: var(--color-accent-soft); color: var(--color-ink); }
+h1, h2, h3 { font-family: var(--font-display); font-weight: 500; color: var(--color-ink); letter-spacing: var(--tracking-display); text-wrap: balance; line-height: 1.04; margin: 0; overflow-wrap: break-word; min-width: 0; }
+p { margin: 0; text-wrap: pretty; }
+a { color: var(--color-ink-2); text-underline-offset: 0.2em; }
+a:hover { color: var(--color-accent); }
+:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; transition: none; }
+.m { font-family: var(--font-outlier); font-variant-numeric: tabular-nums slashed-zero; }
+.wrap { max-width: var(--container); margin: 0 auto; padding: 0 var(--gutter); }
+
+.nav { padding-top: 16px; }
+.bar { display: flex; align-items: center; border: 1px solid var(--color-rule); border-radius: var(--radius-card); background: var(--color-paper-2); min-height: 48px; }
+.bar .name { color: var(--color-ink); font-weight: 500; text-decoration: none; padding: 0 16px; border-right: 1px solid var(--color-rule); align-self: stretch; display: flex; align-items: center; }
+.bar ul { display: flex; gap: 24px; list-style: none; margin: 0; padding: 0 16px; font-size: var(--text-sm); }
+.bar ul a { color: var(--color-muted); text-decoration: none; }
+.bar ul a:hover { color: var(--color-ink); }
+.bar .act { margin-left: auto; padding: 8px; border-left: 1px solid var(--color-rule); }
+
+.btn { font: inherit; font-size: var(--text-sm); font-weight: 500; border-radius: var(--radius-pill); padding: 8px 16px; cursor: pointer;
+  border: 1px solid var(--color-rule-2); background: transparent; color: var(--color-ink); text-decoration: none; display: inline-block;
+  transition: background-color var(--dur-micro) var(--ease), border-color var(--dur-micro) var(--ease); }
+.btn:hover { border-color: var(--color-muted); background: var(--color-paper-3); }
+.btn--primary { background: var(--color-accent); color: var(--color-accent-ink); border-color: var(--color-accent); }
+.btn--primary:hover { background: var(--color-ink); border-color: var(--color-ink); }
+.btn:active { transform: translateY(1px); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+
+.hero .wrap { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 56px; align-items: center; min-height: min(760px, calc(100dvh - 64px)); padding-top: 40px; padding-bottom: 56px; }
+.hero h1 { font-size: var(--text-display); }
+.hero .lede { margin-top: 16px; color: var(--color-ink-2); font-size: var(--text-lg); max-width: 32ch; }
+.hero .actions { display: flex; gap: 12px; margin-top: 28px; flex-wrap: wrap; }
+
+.arena { border: 1px solid var(--color-rule); border-radius: var(--radius-card); background: var(--color-paper-2); overflow: hidden; }
+.arena-top { display: flex; justify-content: space-between; align-items: center; padding: 16px 16px; border-bottom: 1px solid var(--color-rule); gap: 12px; }
+.arena-top h2 { font-size: var(--text-lg); letter-spacing: -0.01em; }
+.tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-bottom: 1px solid var(--color-rule); }
+.tabs button { font: inherit; font-size: var(--text-sm); background: transparent; color: var(--color-muted); border: 0; border-right: 1px solid var(--color-rule); padding: 12px; cursor: pointer; text-align: left; }
+.tabs button:last-child { border-right: 0; }
+.tabs button[aria-selected="true"] { background: var(--color-cool-soft); color: var(--color-cool); }
+.tabs small { display: block; color: var(--color-muted); font-size: 0.8125rem; }
+table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+th { text-align: left; font-weight: 500; color: var(--color-muted); padding: 8px 16px; border-bottom: 1px solid var(--color-rule); }
+td { padding: 12px 16px; border-bottom: 1px solid var(--color-rule); color: var(--color-ink-2); }
+tr.pick { cursor: pointer; }
+tr.pick:hover td { background: var(--color-paper); }
+tr[aria-selected="true"] td { background: var(--color-paper-3); box-shadow: inset 0 0 0 0 transparent; }
+tr[aria-selected="true"] td:first-child { box-shadow: inset 2px 0 0 var(--color-accent); }
+.res-bad { color: var(--color-bad); } .res-ok { color: var(--color-ok); } .res-na { color: var(--color-muted); }
+.wire { background: var(--color-paper-3); padding: 16px 16px; font-size: 0.8125rem; min-height: 9.5em; max-height: 9.5em; overflow: hidden; color: var(--color-muted); }
+.wire div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wire .who { color: var(--color-accent); } .wire .k { color: var(--color-cool); } .wire .hit { color: var(--color-bad); } .wire .safe { color: var(--color-ok); }
+.arena-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 16px; border-top: 1px solid var(--color-rule); font-size: var(--text-sm); }
+
+section.band { padding: 96px 0; border-top: 1px solid var(--color-rule); }
+.head { display: grid; grid-template-columns: minmax(0, 6fr) minmax(0, 5fr); gap: 32px; align-items: end; margin-bottom: 36px; }
+.head h2 { font-size: var(--text-display-s); }
+.head p { color: var(--color-ink-2); }
+.reading { border: 1px solid var(--color-rule); border-radius: var(--radius-card); background: var(--color-paper-2); display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.reading > div { padding: 28px; }
+.reading > div + div { border-left: 1px solid var(--color-rule); }
+.reading .was { color: var(--color-bad); text-decoration: line-through; font-size: var(--text-lg); }
+.reading .now { color: var(--color-ink); font-size: var(--text-display-s); line-height: 1.1; margin-top: 8px; }
+.reading .meta { margin-top: 16px; font-size: var(--text-sm); }
+.reading .meta .p { color: var(--color-accent); } .reading .meta .t { color: var(--color-cool); }
+.trail { list-style: none; margin: 0; padding: 0 0 0 24px; border-left: 1px solid var(--color-rule-2); }
+.trail li { position: relative; padding: 0 0 28px; }
+.trail li::before { content: ""; position: absolute; left: -27px; top: 7px; width: 9px; height: 9px; border-radius: 50%; background: var(--color-paper); border: 1px solid var(--color-rule-2); }
+.trail li.done::before { background: var(--color-ok); border-color: var(--color-ok); }
+.trail h3 { font-size: var(--text-lg); letter-spacing: -0.01em; }
+.trail p { margin-top: 4px; }
+footer { border-top: 1px solid var(--color-rule); padding: 24px 0 40px; font-size: var(--text-sm); }
+footer .wrap { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+
+@media (max-width: 900px) {
+  .hero .wrap, .head, .reading { grid-template-columns: minmax(0, 1fr); }
+  .reading > div + div { border-left: 0; border-top: 1px solid var(--color-rule); }
+  .bar ul { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .btn { transition: none; } }
+</style>
+</head>
+<body>
+<header class="nav"><div class="wrap"><nav class="bar" aria-label="Main">
+  <a class="name" href="#top">Quatinit</a>
+  <ul><li><a href="#arena">The arena</a></li><li><a href="#record">The record</a></li><li><a href="#rounds">Rounds</a></li></ul>
+  <span class="act"><a class="btn" href="https://github.com/MadSank/Quanting-It">Source</a></span>
+</nav></div></header>
+
+<main id="top">
+  <section class="hero" aria-labelledby="h1">
+    <div class="wrap">
+      <div>
+        <h1 id="h1">Who read the message?</h1>
+        <p class="lede">Replay an attack against each version and watch the wire.</p>
+        <div class="actions"><button class="btn btn--primary" id="run2">Replay the attack</button><a class="btn" href="#record">Read the record</a></div>
+      </div>
+
+      <div class="arena" id="arena">
+        <div class="arena-top"><h2>Arena</h2><span class="m" id="status">idle</span></div>
+        <div class="tabs" role="tablist" aria-label="Protocol version">
+          <button role="tab" aria-selected="true" data-v="v0">v0<small>signed, sent in clear</small></button>
+          <button role="tab" aria-selected="false" data-v="v1">v1<small>BB84 key, AES-256-GCM</small></button>
+        </div>
+        <table>
+          <thead><tr><th scope="col">Attack</th><th scope="col">Plaintext read</th><th scope="col">Forged</th></tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+        <div class="wire m" id="wire" aria-live="polite"><div>Pick a version and an attack, then replay.</div></div>
+        <div class="arena-foot"><span>Scored by redteam/judge.py with hidden messages</span><button class="btn btn--primary" id="run">Replay</button></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="record" aria-labelledby="h2a">
+    <div class="wrap">
+      <div class="head"><h2 id="h2a">What changed, and why</h2><p>Each finding is kept next to the line that fixed it.</p></div>
+      <div class="reading">
+        <div>
+          <p>How a missing signature tag is treated in bob.py</p>
+          <p class="was m">ml_dsa_valid = True</p>
+          <p class="now m">reject if absent</p>
+          <p class="meta"><span class="p">Found in review</span>, <span class="t">16 Nov 2026</span>. A tag could be deleted in transit and Bob would accept.</p>
+        </div>
+        <div>
+          <p>What travels on the wire in a data packet</p>
+          <p class="was m">message: plaintext</p>
+          <p class="now m">ct: AES-256-GCM</p>
+          <p class="meta"><span class="p">Passive tap</span>, <span class="t">v0 read 1.00, v1 read 0.00</span>. Encryption added in v1.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="rounds" aria-labelledby="h2b">
+    <div class="wrap">
+      <div class="head"><h2 id="h2b">Rounds</h2><p>Every round re-runs every earlier attack against the new version.</p></div>
+      <ol class="trail">
+        <li class="done"><h3>Round 0, the baseline</h3><p>v0 as built. A passive tap reads every message.</p></li>
+        <li class="done"><h3>v1, encryption</h3><p>BB84 key with AES-256-GCM. The passive tap reads nothing.</p></li>
+        <li><h3>Round 1, active attacks</h3><p>Man in the middle, downgrade, replay and photon splitting. Not yet run.</p></li>
+      </ol>
+    </div>
+  </section>
+</main>
+
+<footer><div class="wrap"><span>Quatinit, a research prototype running in simulation.</span><a href="https://github.com/MadSank/Quanting-It">github.com/MadSank/Quanting-It</a></div></footer>
+
+<script>
+(() => {
+  const $ = (s) => document.querySelector(s);
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // Only the passive tap has been scored; others are honest "not yet run".
+  const ATTACKS = [
+    { id: 'passive', name: 'Passive tap', res: { v0: [1, 0], v1: [0, 0] } },
+    { id: 'mitm', name: 'Man in the middle on BB84', res: null },
+    { id: 'downgrade', name: 'Force fallback, then Shor', res: null },
+    { id: 'replay', name: 'Replay a captured packet', res: null },
+  ];
+  const WIRE = {
+    v0: [['Alice', 'Bob', 'session', 'sid, challenge, ML-DSA tag'], ['Alice', 'Bob', 'data', 'message: "attack at dawn"'], ['Alice', 'Bob', 'data', 'qds: 32 revealed keys']],
+    v1: [['Alice', 'Bob', 'hello', 'sid, v1'], ['Alice', 'Bob', 'qkd_start', '40000 pulses'], ['Bob', 'Alice', 'qkd_detect', 'slots, bases'], ['Alice', 'Bob', 'qkd_sift', 'bases'], ['Alice', 'Bob', 'qkd_decision', 'continue'], ['Alice', 'Bob', 'data', 'ct: 9f3a...e1, seq 1']],
+  };
+  let v = 'v0', pick = 'passive';
+  function rows() {
+    $('#rows').innerHTML = ATTACKS.map((a) => {
+      const r = a.res && a.res[v];
+      const read = r ? `<span class="m ${r[0] ? 'res-bad' : 'res-ok'}">${r[0].toFixed(2)}</span>` : '<span class="res-na">not yet run</span>';
+      const forged = r ? `<span class="m ${r[1] ? 'res-bad' : 'res-ok'}">${r[1]}</span>` : '<span class="res-na">not yet run</span>';
+      return `<tr class="pick" tabindex="0" aria-selected="${a.id === pick}" data-a="${a.id}"><td>${a.name}</td><td>${read}</td><td>${forged}</td></tr>`;
+    }).join('');
+    document.querySelectorAll('tr.pick').forEach((tr) => {
+      const go = () => { pick = tr.dataset.a; rows(); };
+      tr.addEventListener('click', go); tr.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
+    });
+  }
+  document.querySelectorAll('[data-v]').forEach((t) => t.addEventListener('click', () => {
+    v = t.dataset.v; document.querySelectorAll('[data-v]').forEach((x) => x.setAttribute('aria-selected', x === t)); rows();
+  }));
+  function replay() {
+    const a = ATTACKS.find((x) => x.id === pick), w = $('#wire'), lines = WIRE[v];
+    $('#run').disabled = $('#run2').disabled = true; $('#status').textContent = 'replaying'; w.innerHTML = '';
+    const out = (html) => { const d = document.createElement('div'); d.innerHTML = html; w.appendChild(d); while (w.children.length > 6) w.firstChild.remove(); };
+    let i = 0;
+    const step = () => {
+      if (i < lines.length) { const [s, d, k, p] = lines[i++]; out(`<span class="who">${s}</span> to <span class="who">${d}</span> <span class="k">${k}</span> ${p}`); return reduce ? step() : setTimeout(step, 260); }
+      const r = a.res && a.res[v];
+      if (!r) out('<span>This attack has not been scored yet. It runs in round 1.</span>');
+      else if (r[0]) out('<span class="hit">Eve read the plaintext straight off the wire.</span>');
+      else out('<span class="safe">Eve holds ciphertext only. Nothing read.</span>');
+      $('#status').textContent = 'done'; $('#run').disabled = $('#run2').disabled = false;
+    };
+    step();
+  }
+  $('#run').addEventListener('click', replay);
+  $('#run2').addEventListener('click', () => { $('#arena').scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'center' }); replay(); });
+  rows();
+})();
+</script>
+</body>
+</html>

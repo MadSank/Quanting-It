@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quatinit, Lumen variant 2: Paths</title>
+<meta name="description" content="Choose the protocol and whether Eve listens, then follow your sentence to a receipt of what happened. Lumen variant 2.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif&family=Geist:wght@400;500&family=Geist+Mono:wght@400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../_lumen/base.css">
+<style>
+/* Hallmark · theme: lumen (chosen by the user) · genre: atmospheric · job: try · hero: the sentence you type · nav: wordmark only · footer: one line · signature: two choices in the story change what Eve and Bob end up holding, closed by a receipt · scroll: one pinned card · mode: fast preview */
+/* Hallmark · pre-emit critique: P4 H4 E5 S5 R5 V4 · weakest: V, the card is quiet; the choices carry the drama */
+.card { width: 100%; max-width: 560px; background: var(--color-paper-2); border: 1px solid var(--color-rule-2); border-radius: var(--radius-card); padding: 28px; color: var(--color-ink-2); }
+.card .who { display: flex; justify-content: space-between; font-size: var(--text-sm); color: var(--color-muted); }
+.card .who b { color: var(--color-live); font-weight: 400; }
+.card .who b.bad { color: var(--color-accent-2); }
+.msg { margin-top: 20px; font-family: var(--font-display); font-size: var(--text-title); color: var(--color-ink); line-height: 1.2; min-height: 2.4em; overflow-wrap: anywhere; }
+.msg.code { font-family: var(--font-outlier); font-size: var(--text-base); color: var(--color-accent); line-height: 1.5; }
+.lanes { margin-top: 20px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-top: 1px solid var(--color-rule); }
+.lanes div { padding-top: 12px; min-width: 0; }
+.lanes div + div { padding-left: 16px; border-left: 1px solid var(--color-rule); }
+.lanes span { font-size: var(--text-sm); color: var(--color-muted); display: block; }
+.lanes p { margin-top: 4px; color: var(--color-ink); overflow-wrap: anywhere; font-size: var(--text-sm); }
+.lanes p.code { font-family: var(--font-outlier); color: var(--color-accent); }
+.picks { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 20px; }
+.receipt { margin-top: 20px; display: grid; gap: 0; }
+.receipt div { display: flex; justify-content: space-between; gap: 16px; padding: 8px 0; border-bottom: 1px dashed var(--color-rule-2); font-size: var(--text-sm); }
+.receipt dt { color: var(--color-muted); }
+.receipt dd { margin: 0; color: var(--color-ink); text-align: right; }
+.again { margin-top: 20px; justify-self: start; }
+</style>
+</head>
+<body>
+<header class="nav"><div class="wrap"><a class="name" href="#top">quatinit</a><a href="https://github.com/MadSank/Quanting-It">Source</a></div></header>
+<main id="top">
+  <section class="hero" aria-labelledby="h1">
+    <div class="wrap">
+      <h1 id="h1">Type a sentence. Choose its fate.</h1>
+      <p class="lede">Pick the protocol and the listener. See what each side holds.</p>
+      <form class="compose" id="compose">
+        <label class="vh" for="text">Your sentence</label>
+        <input id="text" maxlength="60" value="meet me at the north gate at nine" autocomplete="off">
+        <button class="btn" type="submit">Send it</button>
+      </form>
+    </div>
+  </section>
+
+  <section class="wrap story" id="story" aria-label="Your sentence, with choices">
+    <div>
+      <article class="step" data-s="0"><h2>you write it</h2><p>Alice has your sentence. Bob is waiting. Eve may be on the line.</p></article>
+      <article class="step" data-s="1" id="pick-v"><h2>which protocol?</h2><p>v0 signs the message but sends it as is. Today adds a photon key and encryption.</p>
+        <div class="picks" role="group" aria-label="Protocol"><button class="choice" data-v="v0" aria-pressed="false">v0</button><button class="choice" data-v="v1" aria-pressed="true">today</button></div></article>
+      <article class="step" data-s="2"><h2>is anyone listening?</h2><p>Eve can sit on the fibre and the wire.</p>
+        <div class="picks" role="group" aria-label="Listener"><button class="choice" data-e="0" aria-pressed="true">nobody</button><button class="choice" data-e="1" aria-pressed="false">Eve</button></div></article>
+      <article class="step" data-s="3"><h2>the line</h2><p id="p3">Photons cross first, if the protocol uses them.</p></article>
+      <article class="step" data-s="4"><h2>what each side holds</h2><p>Bob on the left, Eve on the right.</p></article>
+      <article class="step" data-s="5"><h2>your receipt</h2><p>Everything that happened to one sentence.</p><button class="btn again" id="again">Try the other path</button></article>
+    </div>
+    <div class="stage">
+      <div class="card" aria-live="polite">
+        <div class="who"><span id="where">alice</span><b id="state">ready</b></div>
+        <div id="body"></div>
+      </div>
+    </div>
+  </section>
+</main>
+<footer><div class="wrap"><span>Quatinit, a research prototype running in simulation.</span><a href="https://github.com/MadSank/Quanting-It">github.com/MadSank/Quanting-It</a></div></footer>
+<script type="module">
+import { seal, onStep, bb84, reduced } from '../_lumen/story.js';
+const $ = (s) => document.querySelector(s);
+const text = () => $('#text').value.trim() || 'meet me at the north gate at nine';
+let v = 'v1', eve = 0, step = 0, run = null, ct = '', attempts = 0;
+const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+async function simulate() {
+  ct = await seal(text()); attempts = 0; run = null;
+  if (v === 'v1') { do { attempts++; run = bb84(400, eve); } while (run.qber > 0.11 && attempts < 3); }
+}
+function lane(bobLabel, bob, eveLabel, eveVal, eveCode) {
+  return `<div class="lanes"><div><span>${bobLabel}</span><p>${bob}</p></div><div><span>${eveLabel}</span><p class="${eveCode ? 'code' : ''}">${eveVal}</p></div></div>`;
+}
+function render() {
+  const b = $('#body'), st = $('#state'); st.className = '';
+  const W = ['alice', 'alice', 'the line', 'the fibre', 'both ends', 'receipt']; $('#where').textContent = W[step];
+  const aborts = v === 'v1' && run ? (run.qber > 0.11 ? attempts : attempts - 1) : 0, caught = aborts > 0;
+  if (step <= 2) { st.textContent = step === 0 ? 'ready' : (v === 'v0' ? 'v0, plain text' : 'today, encrypted') + (eve ? ', Eve listening' : ''); b.innerHTML = `<p class="msg">${esc(text())}</p>`; return; }
+  if (step === 3) {
+    if (v === 'v0') { st.textContent = 'no key needed'; b.innerHTML = `<p class="msg">${esc(text())}</p>` + lane('on the wire', 'your sentence, signed', 'Eve', eve ? 'copies it' : 'not there'); }
+    else { st.textContent = caught ? `aborted ${aborts}x` : 'key agreed'; if (caught) st.className = 'bad';
+      b.innerHTML = `<p class="msg code">${run.trace.slice(0, 48).map((t) => t.err ? 'x' : t.keep ? '|' : '.').join('')}</p>` + lane('errors at bob', `${(run.qber * 100).toFixed(1)}% over ${run.sifted} kept bits`, 'what happened', eve ? (run.qber > 0.11 ? 'Eve kept tripping the alarm; no key was ever agreed' : `Bob saw Eve and threw ${aborts} key${aborts === 1 ? '' : 's'} away`) : 'clean line, 1.5% fibre noise'); }
+    return;
+  }
+  const noKey = v === 'v1' && run && run.qber > 0.11;
+  if (step === 4) {
+    st.textContent = v === 'v0' && eve ? 'Eve read it' : 'only Bob read it'; if (v === 'v0' && eve) st.className = 'bad';
+    if (noKey) { b.innerHTML = `<p class="msg">nothing sent</p>` + lane('Bob', 'waits for a clean key', 'Eve', 'nothing at all'); return; }
+    b.innerHTML = lane('Bob', esc(text()), 'Eve', v === 'v0' ? (eve ? esc(text()) : 'not listening') : (eve ? ct : 'not listening'), v === 'v1' && eve);
+    return;
+  }
+  st.textContent = 'done';
+  const rows = [['sentence', esc(text())], ['protocol', v === 'v0' ? 'v0' : 'today (BB84 + AES-256-GCM)'], ['listener', eve ? 'Eve' : 'nobody'],
+    ['keys thrown away', v === 'v1' ? String(aborts) : 'none used'], ['Bob got', noKey ? 'nothing yet' : 'your sentence'],
+    ['Eve got', !eve ? 'nothing' : v === 'v0' ? 'your sentence' : noKey ? 'nothing' : `${ct.length / 2} bytes of noise`]];
+  b.innerHTML = `<dl class="receipt">${rows.map(([k, val]) => `<div><dt>${k}</dt><dd>${val}</dd></div>`).join('')}</dl>`;
+}
+document.querySelectorAll('[data-v]').forEach((x) => x.addEventListener('click', async () => { v = x.dataset.v; document.querySelectorAll('[data-v]').forEach((y) => y.setAttribute('aria-pressed', y === x)); await simulate(); render(); }));
+document.querySelectorAll('[data-e]').forEach((x) => x.addEventListener('click', async () => { eve = +x.dataset.e; document.querySelectorAll('[data-e]').forEach((y) => y.setAttribute('aria-pressed', y === x)); await simulate(); render(); }));
+$('#again').addEventListener('click', async () => { v = v === 'v0' ? 'v1' : 'v0'; eve = 1; document.querySelectorAll('[data-v]').forEach((y) => y.setAttribute('aria-pressed', y.dataset.v === v)); document.querySelectorAll('[data-e]').forEach((y) => y.setAttribute('aria-pressed', y.dataset.e === '1')); await simulate(); $('#pick-v').scrollIntoView({ behavior: reduced() ? 'auto' : 'smooth', block: 'center' }); });
+$('#text').addEventListener('input', async () => { await simulate(); render(); });
+$('#compose').addEventListener('submit', (e) => { e.preventDefault(); $('#story').scrollIntoView({ behavior: reduced() ? 'auto' : 'smooth' }); });
+onStep((s) => { step = s; render(); });
+await simulate(); render();
+</script>
+</body>
+</html>

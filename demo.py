@@ -1,6 +1,6 @@
 from src.attack_simulator import AttackSimulator
 from src.metrics import AttackType
-from src.orbital_encoder import OrbitalEncoder
+from src.e91_monitor import E91Monitor
 import time
 
 def run_demo():
@@ -8,7 +8,7 @@ def run_demo():
     print(" HYBRID POST-QUANTUM + QUANTUM AUTHENTICATION DEMO ")
     print("====================================================")
     
-    sim = AttackSimulator(proof_length=8)
+    sim = AttackSimulator(n_qubits=8)
     
     print("\n[SCENARIO 1: LEGITIMATE MESSAGE]")
     print("Alice sends legitimate message.")
@@ -36,14 +36,13 @@ def run_demo():
     else:
         print("Bob ACCEPTS (Attack undetected under current basis combination).")
         
-    print("\n[SCENARIO 5: EXPERIMENTAL ORBITAL ENCODING]")
-    print("Demonstrating bits to orbital grouping mapping:")
-    bits = "0110"
-    orbitals = OrbitalEncoder.encode_to_orbitals(bits, 2)
-    print(f"Input: {bits}")
-    print(f"Encoded: {' - '.join(orbitals)}")
-    eff = OrbitalEncoder.encoding_efficiency(2, 2)
-    print(f"Information Loss: {eff['information_loss']} (States: {eff['orbital_states']} < {eff['classical_states']})")
+    print("\n[SCENARIO 5: E91 CHANNEL INTEGRITY MONITORING]")
+    print("Monitoring Bell-state correlation on clean vs noisy channels:")
+    monitor = E91Monitor(num_pairs=50, error_threshold=0.15)
+    clean_res = monitor.measure_disturbance(attack_type="NONE")
+    print(f"Clean Channel Error Rate: {clean_res['error_rate']:.3f} (Detected: {clean_res['detected']})")
+    attack_res = monitor.measure_disturbance(attack_type="INTERCEPT_RESEND")
+    print(f"Under Intercept-Resend:   {attack_res['error_rate']:.3f} (Detected: {attack_res['detected']})")
     
     print("\n====================================================")
     print(" DEMO COMPLETE")
@@ -51,3 +50,4 @@ def run_demo():
 
 if __name__ == "__main__":
     run_demo()
+
