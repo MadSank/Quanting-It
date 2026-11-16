@@ -6,6 +6,8 @@
 <title>Quatinit: send a sentence through a quantum-safe line</title>
 <meta name="description" content="Type a sentence and watch it become hash bits, photons and ciphertext on its way from Alice to Bob. Quatinit is a research prototype of quantum-safe messaging.">
 <meta name="theme-color" content="#07060d">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
 <link rel="icon" href="assets/mark.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -91,7 +93,7 @@
       <h2 id="h2-inside">three locks on one sentence</h2>
       <div class="layers">
         <article><h3>light</h3><p>BB84 builds the key from single photons, 40,000 pulses a session. Above 11% errors the key is discarded.</p><p class="m spec">qsc/bb84.py</p></article>
-        <article><h3>lattices</h3><p>ML-KEM-768 and ML-DSA-65, the NIST post-quantum standards, cover what photons cannot. Every handshake message is signed.</p><p class="m spec">qsc/channel.py</p></article>
+        <article><h3>lattices</h3><p>ML-KEM-768 and ML-DSA-65, the NIST post-quantum standards, cover what photons cannot. One signed handshake, separate keys each way.</p><p class="m spec">qsc/channel.py</p></article>
         <article><h3>one-time keys</h3><p>The signature scheme of Gottesman and Chuang: 32 positions, 128-bit keys, each checked by a destructive SWAP test.</p><p class="m spec">qds_signer.py, swap_test.py</p></article>
       </div>
     </div>
@@ -111,10 +113,11 @@
             <tr><td>Passive tap</td><td class="m">v0</td><td class="m bad">1.00</td><td class="m">0</td></tr>
             <tr><td>Passive tap</td><td class="m">v1</td><td class="m good">0.00</td><td class="m">0</td></tr>
             <tr><td>Passive tap</td><td class="m">v2</td><td class="m good">0.00</td><td class="m">0</td></tr>
-            <tr><td>Tampering, replay, stripped tags</td><td class="m">v2</td><td colspan="2" class="good">rejected, pinned by regression tests</td></tr>
+            <tr><td>Passive tap</td><td class="m">v3</td><td class="m good">0.00</td><td class="m">0</td></tr>
+            <tr><td>Tampering, replay, reflection</td><td class="m">v2, v3</td><td colspan="2" class="good">rejected, pinned by regression tests</td></tr>
           </tbody>
         </table>
-        <pre class="cmd m"><span class="p">$</span> python -m redteam.judge redteam/attacks/example_passive.py --versions v0 v1 v2</pre>
+        <pre class="cmd m"><span class="p">$</span> python -m redteam.judge redteam/attacks/example_passive.py --versions v0 v1 v2 v3</pre>
       </div>
     </div>
   </section>
@@ -127,7 +130,7 @@
 <span class="p">$</span> python -m venv .venv
 <span class="p">$</span> .venv/Scripts/pip install -r requirements.txt
 <span class="p">$</span> .venv/Scripts/streamlit run app.py</pre>
-      <div class="run-foot"><button class="choice" id="copy" type="button">Copy commands</button><span>186 tests pass with <span class="m">pytest tests</span>.</span></div>
+      <div class="run-foot"><button class="choice" id="copy" type="button">Copy commands</button><span>206 tests pass with <span class="m">pytest tests</span>.</span></div>
     </div>
   </section>
 </main>

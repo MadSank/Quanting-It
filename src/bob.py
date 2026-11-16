@@ -44,7 +44,7 @@ class Bob:
         """
         self.session_manager = session_manager
         self.qpkd_session = qpkd_session
-        self.e91_monitor = e91_monitor or E91Monitor(num_pairs=64)
+        self.e91_monitor = e91_monitor or E91Monitor()
         self.trusted_classical_pub_key = trusted_classical_pub_key
         self.key_register = key_register or VerifierKeyRegister(owner="Bob")
 
@@ -147,7 +147,13 @@ class Bob:
         qds_is_valid = False
         qds_res = None
 
-        if packet.qds_signature and self.key_register:
+        # SWAP tests destroy the stored copies they use, so they run only for a
+        # packet that has already passed every classical check. A packet that
+        # fails earlier must not be able to burn copies meant for the genuine one.
+        classical_ok = session_valid and replay_valid and classical_hash_valid and ml_dsa_valid
+        if not classical_ok:
+            pass
+        elif packet.qds_signature and self.key_register:
             sig = packet.qds_signature
             qds_n_qubits = getattr(sig, "n_positions", 32)
 
@@ -173,6 +179,7 @@ class Bob:
         else:
             copy_available = False
             qds_is_valid = False
+        qds_skipped = not classical_ok
 
         # Layer 5: E91 Channel Monitor Check
         e91_stats = self.e91_monitor.measure_disturbance(attack_type=simulate_e91_attack)
@@ -278,5 +285,6 @@ class Bob:
                 "verifier": self.key_register.owner if self.key_register else "Bob",
                 "is_transfer": is_transfer,
                 "qds_result": qds_res,
+                "qds_skipped": qds_skipped,
             }
         )

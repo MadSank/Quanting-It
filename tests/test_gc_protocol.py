@@ -178,17 +178,19 @@ class TestForgery:
         # Other positions should pass
         assert result.n_passes >= 6  # At least 6 of 7 legitimate positions pass
 
-    def test_eve_cannot_sign_without_private_keys(self, small_key_pair):
-        """Eve without Alice's private keys cannot produce a valid signature."""
-        bob_register = GCKeyGenerator.distribute_to_verifier(small_key_pair, "Bob")
+    def test_eve_cannot_sign_without_private_keys(self):
+        """Eve without Alice's private keys cannot produce a valid signature.
+
+        Uses the protocol's real parameters (M=32, n=8). With the tiny test
+        key pair (M=8, n=4) every random SWAP test can pass by chance often
+        enough to make this test flaky.
+        """
+        alice_kp = GCKeyGenerator.generate(n_positions=32, fingerprint_qubits=8)
+        bob_register = GCKeyGenerator.distribute_to_verifier(alice_kp, "Bob")
         msg = b"Eve's forged message"
-        
+
         # Eve generates her own keys (different from Alice's)
-        eve_kp = GCKeyGenerator.generate(
-            n_positions=small_key_pair.n_positions,
-            fingerprint_qubits=small_key_pair.fingerprint_qubits,
-            private_key_bits=small_key_pair.private_key_length,
-        )
+        eve_kp = GCKeyGenerator.generate(n_positions=32, fingerprint_qubits=8)
         forged_sig = GCSigner.sign(msg, eve_kp)
         
         verifier = GCVerifier()
@@ -397,7 +399,9 @@ class TestChannelNoise:
 class TestInterceptResend:
     def test_intercept_resend_detected_by_e91(self):
         """E91 monitor detects intercept/resend attack on the channel."""
-        monitor = E91Monitor(num_pairs=100, error_threshold=0.15)
+        # 400 pairs (about 200 compared): with 100 pairs a full intercept-resend
+        # stayed under the 15% threshold about 4% of the time by chance.
+        monitor = E91Monitor(num_pairs=400, error_threshold=0.15)
         result = monitor.measure_disturbance(attack_type="INTERCEPT_RESEND")
         # Intercept/resend should produce error rate ≈ 25%
         assert result["error_rate"] > 0.10

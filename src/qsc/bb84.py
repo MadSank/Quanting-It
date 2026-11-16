@@ -32,10 +32,11 @@ from src.qsc.wire import Envelope, Wire
 
 
 class ProtocolAbort(Exception):
-    def __init__(self, reason: str, stage: str = ""):
+    def __init__(self, reason: str, stage: str = "", stats: dict | None = None):
         super().__init__(reason)
         self.reason = reason
         self.stage = stage
+        self.stats = stats or {}
 
 
 @dataclass
@@ -70,11 +71,14 @@ def canon(obj) -> bytes:
 class Endpoint:
     """One party's view of the classical channel (signing/verifying)."""
 
-    def __init__(self, name: str, sign_key=None, peer_pub=None, authenticate=False):
+    def __init__(self, name: str, sign_key=None, peer_pub=None, authenticate=False,
+                 mac_send: bytes | None = None, mac_recv: bytes | None = None):
         self.name = name
         self.sign_key = sign_key
         self.peer_pub = peer_pub
-        self.authenticate = authenticate
+        self.mac_send = mac_send      # per-direction MAC keys (v3): cheaper than a signature per message
+        self.mac_recv = mac_recv
+        self.authenticate = authenticate or mac_send is not None
         self.counter = 0
 
 
@@ -92,7 +96,10 @@ class ClassicalLink:
             ep.counter += 1
             body["_ctr"] = ep.counter
             msg = canon({"sid": self.sid, "src": src, "dst": dst, "kind": kind, "body": body})
-            body["_sig"] = ep.sign_key.sign(msg).hex()
+            if ep.mac_send is not None:
+                body["_sig"] = hmac.new(ep.mac_send, msg, hashlib.sha3_256).hexdigest()
+            else:
+                body["_sig"] = ep.sign_key.sign(msg).hex()
         delivered = self.wire.send(Envelope(src, dst, kind, body))
         if delivered is None:
             raise ProtocolAbort(f"message {kind} dropped", kind)
@@ -104,9 +111,14 @@ class ClassicalLink:
                     or delivered.dst != dst):
                 raise ProtocolAbort(f"unauthenticated {kind}", kind)
             msg = canon({"sid": self.sid, "src": src, "dst": dst, "kind": kind, "body": got})
-            try:
-                rcv.peer_pub.verify(bytes.fromhex(sig), msg)
-            except Exception:
+            if rcv.mac_recv is not None:
+                ok = hmac.compare_digest(str(sig), hmac.new(rcv.mac_recv, msg, hashlib.sha3_256).hexdigest())
+            else:
+                try:
+                    rcv.peer_pub.verify(bytes.fromhex(sig), msg); ok = True
+                except Exception:
+                    ok = False
+            if not ok:
                 raise ProtocolAbort(f"bad signature on {kind}", kind)
             if got.get("_ctr", 0) <= self.recv_counter[dst]:
                 raise ProtocolAbort(f"replayed {kind}", kind)
@@ -235,7 +247,7 @@ def run_bb84(link: ClassicalLink, wire: Wire, cfg: QKDConfig, A="Alice", B="Bob"
         decision = "abort"
     link.send(A, B, "qkd_decision", {"qber": qber, "decision": decision})
     if decision == "abort":
-        raise ProtocolAbort(f"QBER {qber:.3f} / decoy check failed", "estimation")
+        raise ProtocolAbort(f"QBER {qber:.3f} / decoy check failed", "estimation", stats)
 
     sampled = set(sample_idx)
     a_key = [a_map[i] for (i, _, lv) in a_sift if lv == 0 and i not in sampled]
@@ -276,7 +288,12 @@ def run_bb84(link: ClassicalLink, wire: Wire, cfg: QKDConfig, A="Alice", B="Bob"
             got_a = link.send(A, B, "ec_answer", {"p": ans})
             leak += len(ans)
             nxt = {}
+            touched = set()   # blocks whose parity changed during this round
             for ((key_, idx), half, pa) in zip(items, reqs, got_a["p"]):
+                if key_ in touched:
+                    # this round's answer for it predates a flip inside it: the
+                    # restart decision was already made when the flip happened
+                    continue
                 left_bad = int(b_key[half].sum() % 2) != pa
                 part = half if left_bad else idx[len(idx) // 2:]
                 if len(part) > 1:
@@ -284,13 +301,15 @@ def run_bb84(link: ClassicalLink, wire: Wire, cfg: QKDConfig, A="Alice", B="Bob"
                     continue
                 j = part[0]
                 b_key[j] ^= 1
-                # cascade: blocks containing j in every pass may now mismatch
+                # every block containing j changed parity: restart its search from
+                # the whole block if it now mismatches, otherwise drop it
                 for q, (qb, qpar, qwhere) in enumerate(passes):
                     bi = qwhere.get(j)
                     if bi is None or (q, bi) == key_:
                         continue
+                    touched.add((q, bi))
                     if int(b_key[qb[bi]].sum() % 2) != qpar[bi]:
-                        nxt.setdefault((q, bi), qb[bi])
+                        nxt[(q, bi)] = qb[bi]
                     else:
                         nxt.pop((q, bi), None)
             todo = nxt
@@ -298,15 +317,18 @@ def run_bb84(link: ClassicalLink, wire: Wire, cfg: QKDConfig, A="Alice", B="Bob"
     stats["ec_leak"] = leak
 
     # ---- 5. verification ---------------------------------------------------
+    # 64-bit tag: failure probability 2^-64, and exactly the 64 bits counted
+    # as leaked below (a full 256-bit hash would leak more than is accounted).
+    VERIFY_TAG_HEX = 16
     salt = secrets.token_hex(16)
-    ha = hmac.new(bytes.fromhex(salt), bits_to_bytes(a_key), hashlib.sha256).hexdigest()
+    ha = hmac.new(bytes.fromhex(salt), bits_to_bytes(a_key), hashlib.sha256).hexdigest()[:VERIFY_TAG_HEX]
     got = link.send(A, B, "qkd_verify", {"salt": salt, "hash": ha})
-    hb = hmac.new(bytes.fromhex(got["salt"]), bits_to_bytes(b_key), hashlib.sha256).hexdigest()
+    hb = hmac.new(bytes.fromhex(got["salt"]), bits_to_bytes(b_key), hashlib.sha256).hexdigest()[:VERIFY_TAG_HEX]
     ok = hmac.compare_digest(hb, got["hash"])
     link.send(B, A, "qkd_verify_ack", {"ok": ok})
     if not ok:
         raise ProtocolAbort("error correction failed", "verify")
-    leak += 64  # verification tag leakage (conservative)
+    leak += 4 * VERIFY_TAG_HEX  # verification tag leakage, in bits
 
     # ---- 6. privacy amplification ------------------------------------------
     n = len(a_key)
@@ -326,7 +348,7 @@ def run_bb84(link: ClassicalLink, wire: Wire, cfg: QKDConfig, A="Alice", B="Bob"
     stats["final_bits"] = m
     if m < cfg.min_key_bits:
         link.send(A, B, "pa", {"abort": True})
-        raise ProtocolAbort(f"insufficient secret key ({m} bits)", "pa")
+        raise ProtocolAbort(f"insufficient secret key ({m} bits)", "pa", stats)
     seed = secrets.token_bytes(32)
     got = link.send(A, B, "pa", {"seed": seed.hex(), "m": m})
     ka = toeplitz_hash(a_key, m, seed)

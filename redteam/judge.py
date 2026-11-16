@@ -6,6 +6,10 @@ with secret messages the attacker never sees, and scores it.
 
 An attack plugin is a .py file defining `class Attack(src.qsc.wire.Adversary)`.
 
+WARNING: plugins run as ordinary Python with your user's full permissions.
+The lint below catches rule breaks, it is not a sandbox. Only run plugins
+you wrote or have read.
+
 Scores per version (averaged over trials):
   confidentiality_break  fraction of Alice's plaintexts Eve reproduced exactly
   forgeries_accepted     messages Bob accepted that Alice never sent (or extra replays)

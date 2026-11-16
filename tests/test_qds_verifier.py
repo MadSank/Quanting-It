@@ -56,11 +56,13 @@ def test_qds_verify_wrong_message():
 
 def test_qds_verify_tampered_key():
     """Tampering with revealed keys causes SWAP test failures and signature rejection."""
-    env = setup_gc_verifier_env(16)
+    env = setup_gc_verifier_env(32)
     import os
-    # Tamper with revealed keys across positions
+    # Tamper with every revealed key. Each random key still passes a single-shot
+    # SWAP test about half the time, so with only 10 of 16 keys replaced the test
+    # failed by chance about 5% of the time; with all 32 it is about 1 in 100,000.
     tampered_keys = list(env["signature"].revealed_keys)
-    for idx in range(10):
+    for idx in range(len(tampered_keys)):
         tampered_keys[idx] = os.urandom(len(tampered_keys[idx]))
 
     tampered_sig = GCSignature(
@@ -79,7 +81,6 @@ def test_qds_verify_tampered_key():
         message=env["message"],
     )
 
-    # With 10 invalid keys, probability of all 10 passing single shot is 0.5^10 < 0.001
     assert res.n_failures >= 1
     assert res.outcome == VerificationOutcome.REJ
 

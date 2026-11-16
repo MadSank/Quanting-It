@@ -19,7 +19,8 @@ new version as a regression test.
 
 * `v0` legacy signed packet, sent in clear
 * `v1` first draft: BB84 key and AES-256-GCM
-* `v2` hardened channel, see `docs/HARDENING.md`
+* `v2` hardened channel
+* `v3` recommended: independent parties, transcript-signed hybrid handshake, QKD policy, per-direction keys (see `docs/HARDENING.md`)
 
 ## Threat model
 
@@ -40,6 +41,12 @@ Eve controls the network:
 Eve does not get Alice's or Bob's long-term private keys or RNG state, and
 cannot read process memory. The judge rejects plugins that use `gc`, `inspect`,
 frame introspection, `ctypes`, the oracle registry or the secrets folder.
+
+## Running plugins safely
+
+The judge imports each plugin as normal Python with your permissions. Its lint
+enforces the arena rules but is not a sandbox: only run plugins you wrote or
+have read, or run the judge inside a throwaway container or VM.
 
 ## Scoring
 

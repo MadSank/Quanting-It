@@ -65,6 +65,8 @@ class SessionReport:
     key_sources: list = field(default_factory=list)
     qkd_stats: dict = field(default_factory=dict)
     rejected: int = 0
+    rejections: dict = field(default_factory=dict)
+    replies_accepted: list = field(default_factory=list)
     wire_log: list = field(default_factory=list)
 
 
@@ -81,6 +83,9 @@ class Identity:
 #  v1+ encrypted channel
 # ---------------------------------------------------------------------------
 
+MAX_SKIP = 64   # how far ahead a ratcheted receiver will step past lost messages
+
+
 class _Receiver:
     def __init__(self, cfg: ChannelConfig, key: bytes, sid: str, peer_pk):
         self.cfg, self.sid, self.peer_pk = cfg, sid, peer_pk
@@ -88,37 +93,71 @@ class _Receiver:
         self.key = key
         self.seen: set = set()
         self.next_seq = 1
+        self.skipped: dict[int, bytes] = {}   # message keys for gaps, deleted on use
+
+    def _ratchet_key(self, seq: int):
+        """Message key for seq plus the state to commit if it decrypts.
+        Nothing changes until the caller commits, so a bad packet leaves no trace."""
+        if seq < self.next_seq:
+            if seq not in self.skipped:
+                raise ValueError("replay")
+            return self.skipped[seq], None
+        if seq - self.next_seq > MAX_SKIP:
+            raise ValueError("too far ahead")
+        chain, skipped = self.chain, {}
+        for i in range(self.next_seq, seq):
+            skipped[i] = _hkdf(chain, b"", b"qsc msg key")
+            chain = _hkdf(chain, b"", b"qsc chain")
+        mk = _hkdf(chain, b"", b"qsc msg key")
+        return mk, (_hkdf(chain, b"", b"qsc chain"), skipped)
 
     def handle(self, env: Envelope, report: SessionReport) -> None:
         try:
             p = env.payload
             hdr = p["hdr"]
-            if hdr.get("sid") != self.sid:
+            if hdr.get("sid") != self.sid or hdr.get("v") != self.cfg.name:
                 raise ValueError("wrong session")
             seq = int(hdr["seq"])
-            if self.cfg.replay_protection and (seq in self.seen or seq < self.next_seq):
+            if seq < 1:
+                raise ValueError("bad sequence")
+            if self.cfg.replay_protection and seq in self.seen:
+                raise ValueError("replay")
+            if not self.cfg.ratchet and self.cfg.replay_protection and seq < self.next_seq:
                 raise ValueError("replay")
             if self.cfg.sign_messages:
-                self.peer_pk.verify(bytes.fromhex(p["sig"]), canon({"hdr": hdr, "ct": p["ct"]}))
+                try:
+                    self.peer_pk.verify(bytes.fromhex(p["sig"]), canon({"hdr": hdr, "ct": p["ct"]}))
+                except Exception:
+                    raise ValueError("bad signature")
+            commit = None
             if self.cfg.ratchet:
-                if seq != self.next_seq:
-                    raise ValueError("out-of-order under ratchet")
-                mk = _hkdf(self.chain, b"", b"qsc msg key")
-                new_chain = _hkdf(self.chain, b"", b"qsc chain")
+                mk, commit = self._ratchet_key(seq)
             else:
                 mk = self.key
-            nonce = seq.to_bytes(12, "big")
-            pt = AESGCM(mk).decrypt(nonce, bytes.fromhex(p["ct"]), canon(hdr))
+            try:
+                pt = AESGCM(mk).decrypt(seq.to_bytes(12, "big"), bytes.fromhex(p["ct"]), canon(hdr))
+            except Exception:
+                raise ValueError("decryption failed")
             if self.cfg.pad_to:
                 n = int.from_bytes(pt[:4], "big")
+                if n > len(pt) - 4 or len(pt) % self.cfg.pad_to:
+                    raise ValueError("bad padding")
                 pt = pt[4:4 + n]
+            text = pt.decode("utf-8")
+            # all checks passed: commit state
             if self.cfg.ratchet:
-                self.chain = new_chain
+                if commit is None:
+                    del self.skipped[seq]
+                else:
+                    self.chain, gaps = commit
+                    self.skipped.update(gaps)
             self.seen.add(seq)
             self.next_seq = max(self.next_seq, seq + 1)
-            report.accepted.append(pt.decode("utf-8"))
-        except Exception:
+            report.accepted.append(text)
+        except Exception as e:
             report.rejected += 1
+            reason = str(e) if isinstance(e, ValueError) else "malformed packet"
+            report.rejections[reason] = report.rejections.get(reason, 0) + 1
 
 
 class _Sender:
@@ -155,12 +194,24 @@ def _handshake(cfg: ChannelConfig, wire: Wire, alice: Identity, bob: Identity,
     if hello is None:
         raise ProtocolAbort("hello dropped", "hello")
     sid = hello.payload["sid"]  # Bob learns sid from the wire
+    heard_v = hello.payload.get("v")
+    if heard_v != cfg.name:  # Bob speaks exactly one version: no negotiation, no downgrade
+        raise ProtocolAbort("unsupported version in hello", "hello")
     auth = cfg.identity_auth
     a_end = Endpoint("Alice", alice.sk, bob.pk, auth)
     b_end = Endpoint("Bob", bob.sk, alice.pk, auth)
     link = ClassicalLink(wire, a_end, b_end, sid)
 
     secrets_a, secrets_b, transcript = [], [], []
+    # Bob contributes fresh randomness; the signed reply also echoes the version,
+    # so a changed hello is caught before any key material is exchanged.
+    nonce_b = os.urandom(16).hex()
+    got = link.send("Bob", "Alice", "hello_ack", {"nonce": nonce_b, "v": heard_v, "sid": sid})
+    if got.get("v") != cfg.name or got.get("sid") != sid:
+        raise ProtocolAbort("version or session mismatch", "hello")
+    transcript += [got["nonce"], cfg.name,
+                   hashlib.sha3_256(_raw_pub(alice.pk)).hexdigest(),
+                   hashlib.sha3_256(_raw_pub(bob.pk)).hexdigest()]
 
     if cfg.qkd is not None:
         qcfg = replace(cfg.qkd, authenticate=cfg.qkd.authenticate or auth)
@@ -170,7 +221,7 @@ def _handshake(cfg: ChannelConfig, wire: Wire, alice: Identity, bob: Identity,
             report.key_sources.append("qkd")
             report.qkd_stats = res.stats
         except ProtocolAbort as e:
-            report.qkd_stats = {"abort": e.reason, "stage": e.stage}
+            report.qkd_stats = {**e.stats, "abort": e.reason, "stage": e.stage}
             if cfg.fallback == "x25519":
                 cfg = replace(cfg, kem=tuple(set(cfg.kem) | {"x25519"}))
             elif not cfg.kem:
@@ -202,19 +253,23 @@ def _handshake(cfg: ChannelConfig, wire: Wire, alice: Identity, bob: Identity,
     if len(secrets_a) < cfg.min_secrets:
         raise ProtocolAbort("not enough independent key sources", "handshake")
 
-    salt = hashlib.sha3_256(canon([sid, cfg.name] + transcript)).digest()
-    ka = _hkdf(b"".join(secrets_a), salt, b"qsc v" + cfg.name.encode())
-    kb = _hkdf(b"".join(secrets_b), salt, b"qsc v" + cfg.name.encode())
+    salt = hashlib.sha3_256(canon([sid] + transcript)).digest()
+    info = canon(["qsc", cfg.name, report.key_sources])
+    ka = _hkdf(b"".join(secrets_a), salt, info)
+    kb = _hkdf(b"".join(secrets_b), salt, info)
 
     if cfg.key_confirmation:
-        ta = hmac.new(ka, b"confirm-A" + salt, hashlib.sha3_256).hexdigest()
+        # Separate confirmation keys: the traffic key itself is never used as a MAC key.
+        ca, cb = _hkdf(ka, salt, b"qsc confirm"), _hkdf(kb, salt, b"qsc confirm")
+        ta = hmac.new(ca, b"confirm-A" + salt, hashlib.sha3_256).hexdigest()
         got = link.send("Alice", "Bob", "confirm", {"tag": ta})
-        if not hmac.compare_digest(got["tag"], hmac.new(kb, b"confirm-A" + salt, hashlib.sha3_256).hexdigest()):
+        if not hmac.compare_digest(got["tag"], hmac.new(cb, b"confirm-A" + salt, hashlib.sha3_256).hexdigest()):
             raise ProtocolAbort("key confirmation failed", "confirm")
-        tb = hmac.new(kb, b"confirm-B" + salt, hashlib.sha3_256).hexdigest()
+        tb = hmac.new(cb, b"confirm-B" + salt, hashlib.sha3_256).hexdigest()
         got = link.send("Bob", "Alice", "confirm", {"tag": tb})
-        if not hmac.compare_digest(got["tag"], hmac.new(ka, b"confirm-B" + salt, hashlib.sha3_256).hexdigest()):
+        if not hmac.compare_digest(got["tag"], hmac.new(ca, b"confirm-B" + salt, hashlib.sha3_256).hexdigest()):
             raise ProtocolAbort("key confirmation failed", "confirm")
+        ka, kb = _hkdf(ka, salt, b"qsc traffic"), _hkdf(kb, salt, b"qsc traffic")
     return sid, ka, kb
 
 
@@ -356,16 +411,23 @@ VERSIONS: dict[str, ChannelConfig | None] = {
                     "by HKDF-SHA3; no classical-only fallback; key confirmation; per-message ratchet; "
                     "replay rejection; length padding; ML-DSA on every data packet.",
     ),
+    # v3 is a different architecture (src/qsc/v3.py); this entry only names it.
+    "v3": ChannelConfig(name="v3", description="Two independent parties; transcript-hashed hybrid "
+                        "handshake signed once per side; BB84 mixed in under a QKD policy with "
+                        "MAC-authenticated post-processing; per-direction keys, IVs and ratchets."),
 }
 
 
 def run_session(version: str, messages: list[str], adversary: Adversary | None = None,
-                crqc: bool = False) -> SessionReport:
+                crqc: bool = False, replies: list[str] | None = None, v3_policy=None) -> SessionReport:
     adversary = adversary or PassiveTap()
     adversary.setup(AttackContext(version=version, shor=ShorOracle(crqc)))
     wire = Wire(adversary)
     report = SessionReport(version=version)
-    if VERSIONS[version] is None:
+    if version == "v3":
+        from src.qsc.v3 import run_v3
+        run_v3(messages, wire, report, policy=v3_policy, replies=replies)
+    elif VERSIONS[version] is None:
         _run_legacy(messages, wire, report)
     else:
         _run_encrypted(VERSIONS[version], messages, wire, report)
